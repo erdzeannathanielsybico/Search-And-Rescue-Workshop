@@ -38,7 +38,7 @@ Story: we need to think of story for the camp (final scenario)- Mars Exploration
 
     Option 1 available locally, expensive
     Option 2 available locally, expensive
-    Option 3 comes with nice off road wheel, bracket, coupler and encoder (we will not use encoder)- from China, will order anyway and use the locally available options for demo robots)- Motors Ordered
+    Option 3 comes with nice off road wheel, bracket, coupler and encoder (we will not use encoder)- from China, will order anyway and use the locally available options for demo robots- Motors Ordered
 
     Metal Servo (large)
     Line following Module (besomi)
