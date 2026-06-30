@@ -55,6 +55,21 @@ Tasks:
 
 ---
 
+## Known Issues & Fixes
+
+### Raspberry Pi — WiFi connects but no internet (missing default route)
+**Symptom:** wlan0 has an IP address but `ip route show` is empty and pings to external IPs fail with "Network is unreachable." Git, SSH, and anything network-dependent will fail.
+
+**Cause:** DHCP assigned an IP but didn't install the default gateway route — a NetworkManager hiccup on reconnect.
+
+**Fix:** Turn the wifi connection off and on again to force a clean DHCP handshake:
+```bash
+sudo nmcli connection down "Addi" && sleep 3 && sudo nmcli connection up "Addi"
+```
+Replace `"Addi"` with your wifi network name if it changes. Verify with `ip route show` — you should see a `default via 192.168.1.x dev wlan0` line.
+
+---
+
 ## Confirmed Hardware & Software
 
 ### Raspberry Pi 5
