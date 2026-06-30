@@ -53,3 +53,25 @@ Story: we need to think of story for the camp (final scenario)- Mars Exploration
 
 Tasks:
 
+---
+
+## Confirmed Hardware & Software
+
+### Raspberry Pi 5
+- **OS:** Ubuntu 24.04.4 LTS (Noble Numbat)
+- **Architecture:** aarch64 (ARM64)
+- **ROS:** ROS 2 Jazzy
+- **Note:** VS Code snap install does not work on ARM64 — use the `.deb` package from the official VS Code website instead
+
+### Microcontroller
+- Arduino Nano (ATmega328P) — handles low-level motor control via serial commands from RPi
+- Cannot run micro-ROS (insufficient memory) — communicates with ROS via a serial bridge node on the RPi
+
+### Motor Driver
+- 2x L298N motor driver modules
+- Motor power: 9V supply into the 12V terminal (5V breadboard PSU insufficient for 4 motors)
+- L298N 5V jumper left ON
+
+### Motors
+- 4x DC motors (6V, 130 RPM)
+
