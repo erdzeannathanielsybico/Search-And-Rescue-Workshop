@@ -60,17 +60,29 @@ void setup() {
 
 void loop() {
   if (Serial.available()) {
-    String cmd = Serial.readStringUntil('\n');
-    cmd.trim();
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) return;
 
-    if (cmd == "forward") {
-      Serial.println("FORWARD");
-      forward();
-    } else if (cmd == "backward") {
-      Serial.println("BACKWARD");
-      backward();
-    } else if (cmd.length() > 0) {
-      Serial.println("STOP");
+    // Commands look like "<KEYWORD>,<argument>", e.g. "MOTOR,0"
+    int commaIndex = line.indexOf(',');
+    String keyword = (commaIndex == -1) ? line : line.substring(0, commaIndex);
+    String argument = (commaIndex == -1) ? "" : line.substring(commaIndex + 1);
+
+    if (keyword == "MOTOR") {
+      int direction = argument.toInt();
+      if (direction == 0) {
+        Serial.println("FORWARD");
+        forward();
+      } else if (direction == 1) {
+        Serial.println("BACKWARD");
+        backward();
+      } else {
+        Serial.println("STOP");
+        stopMotors();
+      }
+    } else {
+      Serial.println("Unknown command: " + line);
       stopMotors();
     }
   }
