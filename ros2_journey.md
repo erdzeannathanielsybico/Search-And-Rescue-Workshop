@@ -248,3 +248,7 @@ ros2 run demo_nodes_py listener
 Success looks like the laptop printing `I heard: [Hello World: N]` messages coming from the RPi.
 
 **Why each team needs a different `ROS_DOMAIN_ID`:** if multiple robots (e.g. multiple workshop teams) share the same WiFi network with the *same* domain ID, DDS discovery groups them all together — every team's `Direction` topic would be the same shared topic, so one team's controller could accidentally drive another team's robot, or a listener could receive a mix of everyone's messages. Domain ID is exactly the mechanism that keeps separate ROS 2 systems on the same physical network from crosstalking. Each team needs its own number (e.g. 42, 43, 44, ...), and — since the firewall port range is calculated *from* the domain ID — each team's controller laptop needs its own matching UDP rule for its own domain ID's port range, not a shared one.
+
+---
+
+**✅ Confirmed end-to-end, after all 8 steps above:** laptop (`laptop_controller_test`, pygame keypresses) → `Direction` topic over the cross-machine network → RPi (`serial_bridge_test`'s `direction_to_serial`) → serial → ESP32 (`main.cpp`) → motors actually turning. The full two-machine ROS 2 chain works.

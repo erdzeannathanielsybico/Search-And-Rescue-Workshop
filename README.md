@@ -111,8 +111,9 @@ Use the full `/dev/serial/by-id/...` path (not the `ttyUSB0` it resolves to) whe
 - **Note:** VS Code snap install does not work on ARM64 — use the `.deb` package from the official VS Code website instead
 
 ### Microcontroller
-- Arduino Nano (ATmega328P) — handles low-level motor control via serial commands from RPi
-- Cannot run micro-ROS (insufficient memory) — communicates with ROS via a serial bridge node on the RPi
+- **Currently testing on an ESP32** (see `testing/serial_data_recevinging_test/src/main.cpp`) — an Arduino Nano hasn't been acquired yet; the ESP32 is standing in for it during development.
+- **Planned final microcontroller: Arduino Nano (ATmega328P)** — handles low-level motor control via serial commands from RPi
+- Neither can run micro-ROS (insufficient memory) — communicates with ROS via a serial bridge node on the RPi (`direction_to_serial`)
 
 ### Motor Driver
 - 2x L298N motor driver modules
@@ -148,7 +149,11 @@ ros2 run py_pubsub_test listener
 ```
 
 ### serial_bridge_test (testing/ros2_test_workspace/src/serial_bridge_test)
-RPi ↔ ESP32/Nano serial bridge. `direction_publisher` publishes mock forward/backward direction commands on the `Direction` topic; `direction_to_serial` subscribes and forwards them over serial to the microcontroller.
+RPi ↔ ESP32/Nano serial bridge. Runs **on the RPi**. `direction_to_serial` subscribes to the `Direction` topic and forwards whatever string it receives, unchanged, over serial to the microcontroller (it's protocol-agnostic — doesn't parse or care what the message content is, just relays it).
+
+`direction_publisher` (also in this package) publishes mock alternating `forward`/`backward` messages — it was the original stand-in used to test the pub/sub wiring before a real controller existed. **It's now superseded by `laptop_controller_test`'s `laptop_controller` node** (see below) and its message content (`forward`/`backward`, lowercase) no longer matches the microcontroller's current protocol — don't use it to test against real hardware anymore, it's kept only as a minimal pub/sub example.
+
+**Serial protocol (main.cpp on the microcontroller):** plain-word commands, one per line — `FORWARD`, `BACKWARD`, `LEFT`, `RIGHT`, `STOP`. No numeric codes/magic numbers, deliberately, for readability. Only one action happens at a time (tank-style: can't turn and drive forward simultaneously) — this falls out naturally since the controller only ever tracks one active command. Turning pivots in place (one side's motors forward, the other side's backward); see the comment above `turnLeft()`/`turnRight()` in `main.cpp` for the left/right pin assumption, which may need swapping once tested on the real chassis.
 
 **Identifying the microcontroller's serial port** — the `/dev/ttyUSBx` number isn't stable across reboots/replugs, so use the `by-id` symlink instead, which is tied to the device's hardware ID:
 ```bash
@@ -171,7 +176,7 @@ sudo usermod -aG dialout $USER   # if not listed — requires logging out/in to 
 > ## ⚠️ NOT PART OF THE STUDENT CURRICULUM
 > This package is instructor/prototype tooling only — students will **not** write or see this code, and it is **not** the Day 3 "manual control" step. The workshop plan for student-facing manual control is a **phone app or USB gamepad**, chosen specifically because a 2-day ROS introduction doesn't leave time to also teach pygame, keyboard event handling, or GUI programming. This package exists purely so the RPi ↔ laptop ↔ hardware chain could be tested end-to-end during setup, and is documented here for transparency and future reference — not as teaching material.
 
-Runs **on the laptop** (via WSL2 — see `ros2_journey.md` Journey 2), not the RPi. Opens a small `pygame` window and reads arrow-key input with real `KEYDOWN`/`KEYUP` events (press = fires once, release = fires once — no flicker, unlike an earlier terminal-based attempt that approximated "held down" with a timeout). Publishes `FORWARD` / `BACKWARD` / `LEFT` / `RIGHT` / `STOP` as plain-word `String` messages — currently on a `ControllerTest` topic for isolated testing via `ros2 topic echo`, not yet switched to the real `Direction` topic used by `serial_bridge_test`.
+Runs **on the laptop** (via WSL2 — see `ros2_journey.md` Journey 2), not the RPi. Opens a small `pygame` window and reads arrow-key input with real `KEYDOWN`/`KEYUP` events (press = fires once, release = fires once — no flicker, unlike an earlier terminal-based attempt that approximated "held down" with a timeout). Publishes `FORWARD` / `BACKWARD` / `LEFT` / `RIGHT` / `STOP` as plain-word `String` messages on the real `Direction` topic — the same topic `serial_bridge_test`'s `direction_to_serial` subscribes to.
 
 Requires `pygame`, installed via apt — **not** `pip install pygame`, which fails on Ubuntu 24.04 due to PEP 668 (`externally-managed-environment`) protecting the system Python:
 ```bash
@@ -187,4 +192,8 @@ source install/setup.bash
 ros2 run laptop_controller_test laptop_controller
 ```
 Click the window first so it has keyboard focus, then use the arrow keys.
+
+**This requires cross-machine ROS 2 networking to be set up first** (laptop and RPi are two separate machines on the LAN, not two nodes on one machine) — see `ros2_journey.md` Journey 2, step 8, for WSL2 mirrored networking, matching `ROS_DOMAIN_ID`, and the two Windows Firewall rules (ICMP + DDS UDP port range) that were needed.
+
+**✅ Confirmed working end-to-end:** laptop keypress (pygame) → `Direction` topic over the cross-machine ROS 2 network → RPi's `direction_to_serial` → serial → ESP32 (`main.cpp`) → motors actually drive. Full chain, both machines, tested and working.
 
