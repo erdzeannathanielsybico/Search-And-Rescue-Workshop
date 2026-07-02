@@ -37,6 +37,22 @@ void stopMotors() {
   digitalWrite(IN7, LOW); digitalWrite(IN8, LOW);
 }
 
+// Assumes Driver 1 (IN1-IN4) = left side, Driver 2 (IN5-IN8) = right side.
+// If the robot turns the wrong way on first test, swap which side reverses.
+void turnLeft() {
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
+  digitalWrite(IN5, HIGH); digitalWrite(IN6, LOW);
+  digitalWrite(IN7, HIGH); digitalWrite(IN8, LOW);
+}
+
+void turnRight() {
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
+  digitalWrite(IN5, LOW);  digitalWrite(IN6, HIGH);
+  digitalWrite(IN7, LOW);  digitalWrite(IN8, HIGH);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -64,23 +80,16 @@ void loop() {
     line.trim();
     if (line.length() == 0) return;
 
-    // Commands look like "<KEYWORD>,<argument>", e.g. "MOTOR,0"
-    int commaIndex = line.indexOf(',');
-    String keyword = (commaIndex == -1) ? line : line.substring(0, commaIndex);
-    String argument = (commaIndex == -1) ? "" : line.substring(commaIndex + 1);
-
-    if (keyword == "MOTOR") {
-      int direction = argument.toInt();
-      if (direction == 0) {
-        Serial.println("FORWARD");
-        forward();
-      } else if (direction == 1) {
-        Serial.println("BACKWARD");
-        backward();
-      } else {
-        Serial.println("STOP");
-        stopMotors();
-      }
+    if (line == "FORWARD") {
+      forward();
+    } else if (line == "BACKWARD") {
+      backward();
+    } else if (line == "LEFT") {
+      turnLeft();
+    } else if (line == "RIGHT") {
+      turnRight();
+    } else if (line == "STOP") {
+      stopMotors();
     } else {
       Serial.println("Unknown command: " + line);
       stopMotors();
