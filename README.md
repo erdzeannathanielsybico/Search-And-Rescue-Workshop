@@ -68,6 +68,38 @@ sudo nmcli connection down "Addi" && sleep 3 && sudo nmcli connection up "Addi"
 ```
 Replace `"Addi"` with your wifi network name if it changes. Verify with `ip route show` — you should see a `default via 192.168.1.x dev wlan0` line.
 
+### Serial port — PermissionError: [Errno 13] Permission denied opening /dev/ttyUSB0 (or /dev/serial/by-id/...)
+**Symptom:** A ROS2 node (or any script) calling `serial.Serial(port, baud)` crashes with `PermissionError: [Errno 13] Permission denied` on the port path.
+
+**Cause:** Raw serial port access is restricted to users in the `dialout` group. A fresh user account isn't in it by default.
+
+**Fix:**
+```bash
+groups                              # check if dialout is already listed
+sudo usermod -aG dialout $USER
+```
+Then **log out and log back in** (or reboot) — a new terminal window is *not* enough, since group membership is only re-read when a new login session starts. Verify with `groups` again afterward.
+
+### Identifying which /dev/tty* is the microcontroller
+**Problem:** `ls /dev/tty*` lists hundreds of unrelated virtual/legacy tty devices — not useful for finding a specific USB device, and the `/dev/ttyUSB0`-style number isn't stable across reboots/replugs anyway.
+
+**Fix:** Use the `by-id` symlink instead, which is tied to the device's hardware ID and stays consistent:
+```bash
+ls -l /dev/serial/by-id/
+```
+Output looks like:
+```
+usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0 -> ../../ttyUSB0
+```
+Use the full `/dev/serial/by-id/...` path (not the `ttyUSB0` it resolves to) wherever a serial port path is needed in code — it survives re-enumeration even if the device later shows up as `ttyUSB1`.
+
+### Accidentally running colcon build from the wrong directory
+**Symptom:** Stray `build/`, `install/`, `log/` folders appear at the repo root (or another wrong location), and/or `ros2 run` picks up a node from an unexpected `install/` path.
+
+**Cause:** `colcon build` always builds into whatever directory you're `cd`'d into when you run it — it doesn't know or care where your actual ROS2 workspace is. Running it from the repo root, or from inside a package's `src/` folder, silently creates a second, wrong workspace instead of erroring out.
+
+**Fix:** Always `cd` into the workspace root (`testing/ros2_test_workspace/`) before running `colcon build`, `source install/setup.bash`, or `ros2 run`. If stray artifacts appear elsewhere, they're safe to delete — they're just regenerated build output, not source code.
+
 ---
 
 ## Confirmed Hardware & Software
