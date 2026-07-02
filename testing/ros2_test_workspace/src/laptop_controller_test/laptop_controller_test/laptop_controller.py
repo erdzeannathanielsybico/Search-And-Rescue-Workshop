@@ -1,28 +1,18 @@
-import sys
-import termios
-import tty
-import select
+import pygame
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-# Arrow keys arrive as a 3-character escape sequence: ESC, then '[', then a letter
-ARROW_UP = '\x1b[A'
-ARROW_DOWN = '\x1b[B'
-ARROW_RIGHT = '\x1b[C'
-ARROW_LEFT = '\x1b[D'
-
 KEY_TO_COMMAND = {
-    ARROW_UP: 'FORWARD',
-    ARROW_DOWN: 'BACKWARD',
-    ARROW_LEFT: 'LEFT',
-    ARROW_RIGHT: 'RIGHT',
+    pygame.K_UP: 'FORWARD',
+    pygame.K_DOWN: 'BACKWARD',
+    pygame.K_LEFT: 'LEFT',
+    pygame.K_RIGHT: 'RIGHT',
 }
 
-# Terminals don't report "key released" — if no key arrives within this many
-# seconds, we assume the arrow key was let go and stop the motors.
-NO_KEY_TIMEOUT = 0.3
+# Placeholder window size — becomes the camera feed's resolution once that exists
+WINDOW_SIZE = (640, 480)
 
 
 class LaptopController(Node):
@@ -32,6 +22,7 @@ class LaptopController(Node):
         # check what this node sends with `ros2 topic echo` before wiring it
         # into the real serial bridge.
         self.publisher = self.create_publisher(String, 'ControllerTest', 10)
+        self.current_key = None  # which arrow key (if any) is currently held down
         self.last_command = 'STOP'
 
     def publish_command(self, command):
@@ -43,30 +34,33 @@ class LaptopController(Node):
         self.publisher.publish(msg)
         self.get_logger().info(f'Publishing: {command}')
 
-    def read_key(self):
-        # Waits up to NO_KEY_TIMEOUT seconds for a keypress; '' means timed out
-        ready, _, _ = select.select([sys.stdin], [], [], NO_KEY_TIMEOUT)
-        if not ready:
-            return ''
-        key = sys.stdin.read(1)
-        if key == '\x1b':  # start of an arrow key escape sequence
-            key += sys.stdin.read(2)
-        return key
-
     def run(self):
-        self.get_logger().info('Arrow keys drive the robot. Release = stop. Ctrl+C to quit.')
+        pygame.init()
+        screen = pygame.display.set_mode(WINDOW_SIZE)
+        pygame.display.set_caption('Robot Controller')
+        clock = pygame.time.Clock()
 
-        # Puts the terminal in "raw" mode so a single keypress is available
-        # immediately, without waiting for Enter to be pressed.
-        original_settings = termios.tcgetattr(sys.stdin)
-        tty.setcbreak(sys.stdin.fileno())
-        try:
-            while rclpy.ok():
-                key = self.read_key()
-                command = KEY_TO_COMMAND.get(key, 'STOP')
-                self.publish_command(command)
-        finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, original_settings)
+        self.get_logger().info('Click the window, then use arrow keys. Close the window to quit.')
+
+        running = True
+        while running and rclpy.ok():
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.KEYDOWN and event.key in KEY_TO_COMMAND:
+                    self.current_key = event.key
+                    self.publish_command(KEY_TO_COMMAND[event.key])
+                elif event.type == pygame.KEYUP and event.key == self.current_key:
+                    self.current_key = None
+                    self.publish_command('STOP')
+
+            rclpy.spin_once(self, timeout_sec=0)
+
+            screen.fill((30, 30, 30))  # plain background until the camera feed replaces this
+            pygame.display.flip()
+            clock.tick(30)  # 30 fps cap — matches a typical webcam rate
+
+        pygame.quit()
 
 
 def main(args=None):

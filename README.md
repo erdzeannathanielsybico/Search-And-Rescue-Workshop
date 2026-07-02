@@ -166,3 +166,25 @@ groups
 sudo usermod -aG dialout $USER   # if not listed — requires logging out/in to take effect
 ```
 
+### laptop_controller_test (testing/ros2_test_workspace/src/laptop_controller_test)
+
+> ## ⚠️ NOT PART OF THE STUDENT CURRICULUM
+> This package is instructor/prototype tooling only — students will **not** write or see this code, and it is **not** the Day 3 "manual control" step. The workshop plan for student-facing manual control is a **phone app or USB gamepad**, chosen specifically because a 2-day ROS introduction doesn't leave time to also teach pygame, keyboard event handling, or GUI programming. This package exists purely so the RPi ↔ laptop ↔ hardware chain could be tested end-to-end during setup, and is documented here for transparency and future reference — not as teaching material.
+
+Runs **on the laptop** (via WSL2 — see `ros2_journey.md` Journey 2), not the RPi. Opens a small `pygame` window and reads arrow-key input with real `KEYDOWN`/`KEYUP` events (press = fires once, release = fires once — no flicker, unlike an earlier terminal-based attempt that approximated "held down" with a timeout). Publishes `FORWARD` / `BACKWARD` / `LEFT` / `RIGHT` / `STOP` as plain-word `String` messages — currently on a `ControllerTest` topic for isolated testing via `ros2 topic echo`, not yet switched to the real `Direction` topic used by `serial_bridge_test`.
+
+Requires `pygame`, installed via apt — **not** `pip install pygame`, which fails on Ubuntu 24.04 due to PEP 668 (`externally-managed-environment`) protecting the system Python:
+```bash
+sudo apt install python3-pygame
+```
+
+The pygame window displaying at all from inside WSL2 relies on **WSLg** (GUI app support built into WSL2 on Windows 11) — no extra X-server setup needed.
+
+```bash
+cd testing/ros2_test_workspace
+colcon build
+source install/setup.bash
+ros2 run laptop_controller_test laptop_controller
+```
+Click the window first so it has keyboard focus, then use the arrow keys.
+
