@@ -90,3 +90,29 @@ Replace `"Addi"` with your wifi network name if it changes. Verify with `ip rout
 ### Motors
 - 4x DC motors (6V, 130 RPM)
 
+---
+
+## ROS2 Workspace — Building & Running
+
+### py_pubsub (testing/ros2_pubsub_test)
+Talker/listener test nodes.
+
+**Build** — always `cd` into the workspace directory first. Running `colcon build` from anywhere else (e.g. the repo root) scatters duplicate `build/`, `install/`, `log/` directories outside the workspace:
+```bash
+cd testing/ros2_pubsub_test
+colcon build
+```
+
+**Run** — needs `source install/setup.bash` in *every new terminal*, run from the workspace directory (`testing/ros2_pubsub_test/`). Sourcing without `cd`-ing there first will fail to find the package:
+```bash
+# Terminal 1
+cd testing/ros2_pubsub_test
+source install/setup.bash
+ros2 run py_pubsub talker
+
+# Terminal 2
+cd testing/ros2_pubsub_test
+source install/setup.bash
+ros2 run py_pubsub listener
+```
+
