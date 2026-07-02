@@ -199,3 +199,52 @@ ros2 run py_pubsub_test listener    # terminal 2 (new WSL window/tab — needs i
 - **Running anything ROS 2** (`colcon build`, `ros2 run`, etc.): must happen in a WSL Ubuntu terminal — `ros2` doesn't exist as a Windows command.
 - These aren't two different copies of the code — `/mnt/c/Development/...` (WSL) and `c:\Development\...` (Windows) are the same files on disk. Saving in VS Code is instantly visible to WSL, no syncing needed.
 - Every **new** WSL terminal window/tab needs ROS 2 sourced before `ros2` commands work, unless the `~/.bashrc` line from step 3 is in place — if a fresh terminal says `ros2: command not found`, that's why.
+
+## 8. Cross-machine networking (laptop ↔ RPi)
+
+Everything above gets ROS 2 running *on* the laptop. None of it makes the laptop's nodes able to see the RPi's nodes — that's a separate problem, because two machines talking to each other over a real LAN is fundamentally different from two nodes on the same machine talking over `localhost`.
+
+**8a. Enable WSL2 mirrored networking.** By default WSL2 sits behind its own private NAT subnet, invisible to the rest of the LAN. Check support first:
+```powershell
+wsl --version   # needs 2.0.0+
+```
+Then edit (or create) `%UserProfile%\.wslconfig` on the **Windows** side:
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+Restart WSL for it to take effect:
+```powershell
+wsl --shutdown
+```
+Verify it worked — `hostname -I` inside WSL should now show an IP on your actual home LAN (e.g. `192.168.1.x`, matching the RPi's subnet), not a `172.x.x.x` NAT address.
+
+**8b. Match `ROS_DOMAIN_ID` on both machines.** This is the number DDS uses to group nodes into the same "network" — nodes with different domain IDs never see each other, even on the same physical LAN (see the note below on why this matters with multiple teams). Run on **both** the laptop and the RPi:
+```bash
+echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc
+source ~/.bashrc
+```
+
+**8c. Open two Windows Firewall holes.** Windows blocks unsolicited inbound traffic by default — this is what actually blocked cross-machine discovery, not WSL2 or ROS itself. In an **elevated PowerShell** on the laptop:
+```powershell
+# Lets other devices ping this machine (diagnostic only, not required by ROS 2 itself)
+New-NetFirewallRule -DisplayName "Allow ICMPv4-In" -Protocol ICMPv4 -IcmpType 8 -Direction Inbound -Action Allow
+
+# Lets ROS 2's actual DDS discovery/data traffic (UDP) reach this machine.
+# Port range is calculated from ROS_DOMAIN_ID: base = 7400 + 250 * domain_id.
+# For domain 42: base = 17900, so open a small range above it for a few nodes.
+New-NetFirewallRule -DisplayName "Allow ROS2 DDS (domain 42)" -Protocol UDP -LocalPort 17900-17930 -Direction Inbound -Action Allow
+```
+The RPi side (native Ubuntu, no Windows Firewall) didn't need an equivalent rule in this setup — if the RPi ever has `ufw` or another firewall enabled, the same UDP range would need opening there too.
+
+**8d. Verify with ROS 2's own demo nodes** (not custom code yet — isolates "is the network right" from "is my code right"):
+```bash
+# On the RPi
+ros2 run demo_nodes_py talker
+
+# On the laptop
+ros2 run demo_nodes_py listener
+```
+Success looks like the laptop printing `I heard: [Hello World: N]` messages coming from the RPi.
+
+**Why each team needs a different `ROS_DOMAIN_ID`:** if multiple robots (e.g. multiple workshop teams) share the same WiFi network with the *same* domain ID, DDS discovery groups them all together — every team's `Direction` topic would be the same shared topic, so one team's controller could accidentally drive another team's robot, or a listener could receive a mix of everyone's messages. Domain ID is exactly the mechanism that keeps separate ROS 2 systems on the same physical network from crosstalking. Each team needs its own number (e.g. 42, 43, 44, ...), and — since the firewall port range is calculated *from* the domain ID — each team's controller laptop needs its own matching UDP rule for its own domain ID's port range, not a shared one.

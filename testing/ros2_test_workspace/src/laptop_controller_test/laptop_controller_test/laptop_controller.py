@@ -18,10 +18,7 @@ WINDOW_SIZE = (640, 480)
 class LaptopController(Node):
     def __init__(self):
         super().__init__('laptop_controller')
-        # Publishing to 'ControllerTest' for now, not 'Direction' — lets us
-        # check what this node sends with `ros2 topic echo` before wiring it
-        # into the real serial bridge.
-        self.publisher = self.create_publisher(String, 'ControllerTest', 10)
+        self.publisher = self.create_publisher(String, 'Direction', 10)
         self.current_key = None  # which arrow key (if any) is currently held down
         self.last_command = 'STOP'
 
