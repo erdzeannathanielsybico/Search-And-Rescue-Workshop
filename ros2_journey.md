@@ -1,4 +1,10 @@
-# ROS 2 Journey — From Ubuntu on the RPi to a Running Node
+# ROS 2 Journey
+
+Two separate journeys to the same destination — "a node is running and talking on a topic" — on two different machines. They're kept as two independent sets of steps rather than merged, since the RPi runs Ubuntu natively and the laptop runs it through WSL2, and the setup steps genuinely differ.
+
+---
+
+# Journey 1 — RPi (native Ubuntu)
 
 This is the top-down path actually followed to get from "RPi with Ubuntu on it" to "a node is running and talking on a topic." It's a reference for retracing the steps, not a record of the exact commands typed at the time — the ROS 2 install itself wasn't logged when it happened, and was done by following the official docs directly rather than a fixed script.
 
@@ -120,6 +126,76 @@ Each layer is only set up once, then everything above it in this list is reused:
 
 ---
 
-## Note on the laptop
+# Journey 2 — Windows Laptop (via WSL2)
 
-Doing this same journey on the Windows laptop (rather than the RPi) hasn't been attempted yet. WSL2 + Ubuntu was discussed as a likely route, but that's unconfirmed — nothing about the laptop setup should be treated as established until it's actually done.
+The same destination, but the laptop is Windows, and ROS 2 doesn't run natively there. This journey adds a layer underneath everything in Journey 1: getting a real Ubuntu environment running inside Windows first.
+
+---
+
+## 1. Install WSL2 + Ubuntu 24.04
+
+In an **Administrator PowerShell**:
+```powershell
+wsl --install -d Ubuntu-24.04
+```
+This enables the Windows features WSL needs and downloads the Ubuntu 24.04 image (matching the RPi's Noble/Jazzy pairing). A restart is required after this step.
+
+If, after restarting, `wsl -l -v` still shows no distributions installed, the feature-enable step consumed the restart but the distro itself didn't finish downloading — just run the same install command again; it resumes from "download Ubuntu" without needing another restart.
+
+## 2. First launch and account setup
+
+Launch **Ubuntu-24.04** from the Start menu (or run `wsl`). First boot asks you to create a Unix username/password — separate from both your Windows login and the RPi's account, though there's no harm reusing the same username/password for convenience on a local dev machine.
+
+Verify the version:
+```bash
+lsb_release -a
+```
+Should show `Release: 24.04`, `Codename: noble`.
+
+## 3. Install ROS 2 Jazzy
+
+Identical to Journey 1, step 2 — same official docs (**https://docs.ros.org/en/jazzy/index.html**), same `ros-jazzy-desktop` package, same `source /opt/ros/jazzy/setup.bash` and `~/.bashrc` line. Nothing about this step is laptop-specific.
+
+## 4. Install colcon
+
+`ros-jazzy-desktop` doesn't include colcon. Install the full extension set (not just bare `colcon`, which apt suggests by default):
+```bash
+sudo apt install python3-colcon-common-extensions
+```
+
+## 5. The WSL-specific gotcha: symlinks on `/mnt/c/`
+
+Building an existing repo checked out on the Windows side (reachable from WSL at `/mnt/c/...`) can fail with:
+```
+error: [Errno 1] Operation not permitted
+```
+This happens because `ament_python` packages create a symlink during install, and Windows only allows admins to create symlinks by default — `/mnt/c/` is a real Windows-managed drive, so this restriction applies even though the command is run from Linux.
+
+**Fix:**
+1. Windows Settings → search **"developer"** → **Use developer features** → toggle **Developer Mode** ON.
+2. Fully restart the WSL VM (closing the terminal window is *not* enough — the VM keeps running in the background). From a plain Windows PowerShell:
+   ```powershell
+   wsl --shutdown
+   ```
+3. Reopen the Ubuntu terminal and retry `colcon build`.
+
+If it still fails after this, the fallback is to stop building against `/mnt/c/` and `git clone` the repo into WSL's own native filesystem (`~/...`) instead — native Linux filesystem never hits this symlink restriction, at the cost of maintaining a second checkout that needs its own `git pull`/`push`.
+
+## 6. Build and run — same as Journey 1
+
+Once the symlink issue is resolved, everything from Journey 1 steps 3 onward applies identically:
+```bash
+cd /mnt/c/Development/My_Projects/Search-And-Rescue-Workshop/testing/ros2_test_workspace
+colcon build
+
+source install/setup.bash
+ros2 run py_pubsub_test talker      # terminal 1
+ros2 run py_pubsub_test listener    # terminal 2 (new WSL window/tab — needs its own `source` too)
+```
+
+## 7. The actual day-to-day workflow
+
+- **Editing node code**: normal VS Code on the Windows side (`c:\Development\...`), same as always.
+- **Running anything ROS 2** (`colcon build`, `ros2 run`, etc.): must happen in a WSL Ubuntu terminal — `ros2` doesn't exist as a Windows command.
+- These aren't two different copies of the code — `/mnt/c/Development/...` (WSL) and `c:\Development\...` (Windows) are the same files on disk. Saving in VS Code is instantly visible to WSL, no syncing needed.
+- Every **new** WSL terminal window/tab needs ROS 2 sourced before `ros2` commands work, unless the `~/.bashrc` line from step 3 is in place — if a fresh terminal says `ros2: command not found`, that's why.
