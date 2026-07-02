@@ -44,6 +44,10 @@ build/
 Build/
 build-*/
 
+# ROS2 colcon workspace artifacts
+install/
+log/
+
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt
