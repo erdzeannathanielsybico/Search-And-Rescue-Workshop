@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'dir_pub = serial_bridge_test.direction_publisher:main'
+            'dir_pub = serial_bridge_test.direction_publisher:main',
+            'direction_to_serial = serial_bridge_test.direction_to_serial:main'
         ],
     },
 )

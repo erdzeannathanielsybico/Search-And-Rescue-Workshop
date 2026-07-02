@@ -94,25 +94,43 @@ Replace `"Addi"` with your wifi network name if it changes. Verify with `ip rout
 
 ## ROS2 Workspace — Building & Running
 
-### py_pubsub (testing/ros2_pubsub_test)
-Talker/listener test nodes.
+Workspace root: `testing/ros2_test_workspace/`. Packages live under `src/` inside it (e.g. `src/py_pubsub_test/`, `src/serial_bridge_test/`). `colcon build` / `source install/setup.bash` / `ros2 run` are always run from the workspace root — never from inside `src/`.
 
-**Build** — always `cd` into the workspace directory first. Running `colcon build` from anywhere else (e.g. the repo root) scatters duplicate `build/`, `install/`, `log/` directories outside the workspace:
+**Build** — always `cd` into the workspace root first. Running `colcon build` from anywhere else (e.g. the repo root, or inside `src/`) scatters duplicate `build/`, `install/`, `log/` directories in the wrong place:
 ```bash
-cd testing/ros2_pubsub_test
+cd testing/ros2_test_workspace
 colcon build
 ```
 
-**Run** — needs `source install/setup.bash` in *every new terminal*, run from the workspace directory (`testing/ros2_pubsub_test/`). Sourcing without `cd`-ing there first will fail to find the package:
+**Run** — needs `source install/setup.bash` in *every new terminal*, run from the workspace root. Sourcing without `cd`-ing there first will fail to find the package:
 ```bash
 # Terminal 1
-cd testing/ros2_pubsub_test
+cd testing/ros2_test_workspace
 source install/setup.bash
-ros2 run py_pubsub talker
+ros2 run py_pubsub_test talker
 
 # Terminal 2
-cd testing/ros2_pubsub_test
+cd testing/ros2_test_workspace
 source install/setup.bash
-ros2 run py_pubsub listener
+ros2 run py_pubsub_test listener
+```
+
+### serial_bridge_test (testing/ros2_test_workspace/src/serial_bridge_test)
+RPi ↔ ESP32/Nano serial bridge. `direction_publisher` publishes mock forward/backward direction commands on the `Direction` topic; `direction_to_serial` subscribes and forwards them over serial to the microcontroller.
+
+**Identifying the microcontroller's serial port** — the `/dev/ttyUSBx` number isn't stable across reboots/replugs, so use the `by-id` symlink instead, which is tied to the device's hardware ID:
+```bash
+ls -l /dev/serial/by-id/
+```
+This prints something like:
+```
+usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0 -> ../../ttyUSB0
+```
+Use the full `/dev/serial/by-id/...` path (not the `../../ttyUSB0` it resolves to) as the serial port passed to `serial.Serial(...)` — it stays correct even if the device gets re-enumerated as `ttyUSB1` etc.
+
+If you get a permissions error opening the port, check you're in the `dialout` group:
+```bash
+groups
+sudo usermod -aG dialout $USER   # if not listed — requires logging out/in to take effect
 ```
 
