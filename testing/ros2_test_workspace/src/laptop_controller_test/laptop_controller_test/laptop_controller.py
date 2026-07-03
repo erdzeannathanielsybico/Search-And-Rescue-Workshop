@@ -11,6 +11,16 @@ KEY_TO_COMMAND = {
     pygame.K_RIGHT: 'RIGHT',
 }
 
+# 1-4 pick a speed (PWM value 0-255) — a real value the motors need, not an
+# arbitrary code, so a number here isn't the same "magic number" problem
+# direction commands had.
+KEY_TO_SPEED = {
+    pygame.K_1: 60,
+    pygame.K_2: 120,
+    pygame.K_3: 180,
+    pygame.K_4: 255,
+}
+
 # Placeholder window size — becomes the camera feed's resolution once that exists
 WINDOW_SIZE = (640, 480)
 
@@ -37,7 +47,7 @@ class LaptopController(Node):
         pygame.display.set_caption('Robot Controller')
         clock = pygame.time.Clock()
 
-        self.get_logger().info('Click the window, then use arrow keys. Close the window to quit.')
+        self.get_logger().info('Arrow keys drive, 1-4 set speed. Click the window first. Close it to quit.')
 
         running = True
         while running and rclpy.ok():
@@ -50,6 +60,9 @@ class LaptopController(Node):
                 elif event.type == pygame.KEYUP and event.key == self.current_key:
                     self.current_key = None
                     self.publish_command('STOP')
+                elif event.type == pygame.KEYDOWN and event.key in KEY_TO_SPEED:
+                    # A setting, not a held direction — fires once, no release handling.
+                    self.publish_command(f'SPEED,{KEY_TO_SPEED[event.key]}')
 
             rclpy.spin_once(self, timeout_sec=0)
 

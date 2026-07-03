@@ -53,6 +53,16 @@ void turnRight() {
   digitalWrite(IN7, LOW);  digitalWrite(IN8, HIGH);
 }
 
+// Speed lives entirely on the ENA/ENB pins as a PWM duty cycle (0-255),
+// separate from the IN pins that pick direction above — so changing speed
+// never needs to know or touch the current direction, and vice versa.
+void setSpeed(int speed) {
+  analogWrite(ENA1, speed);
+  analogWrite(ENB1, speed);
+  analogWrite(ENA2, speed);
+  analogWrite(ENB2, speed);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -64,12 +74,7 @@ void setup() {
   pinMode(ENA1, OUTPUT); pinMode(ENB1, OUTPUT);
   pinMode(ENA2, OUTPUT); pinMode(ENB2, OUTPUT);
 
-  // Full speed on all enable pins
-  digitalWrite(ENA1, HIGH);
-  digitalWrite(ENB1, HIGH);
-  digitalWrite(ENA2, HIGH);
-  digitalWrite(ENB2, HIGH);
-
+  setSpeed(255);  // full speed by default, until a SPEED command says otherwise
   stopMotors();
   Serial.println("Setup complete. Starting motor test...");
 }
@@ -80,16 +85,24 @@ void loop() {
     line.trim();
     if (line.length() == 0) return;
 
-    if (line == "FORWARD") {
+    // Every command is a plain word, except SPEED, which carries a value:
+    // "SPEED,180" — split off the part after the comma, if there is one.
+    int commaIndex = line.indexOf(',');
+    String keyword = (commaIndex == -1) ? line : line.substring(0, commaIndex);
+
+    if (keyword == "FORWARD") {
       forward();
-    } else if (line == "BACKWARD") {
+    } else if (keyword == "BACKWARD") {
       backward();
-    } else if (line == "LEFT") {
+    } else if (keyword == "LEFT") {
       turnLeft();
-    } else if (line == "RIGHT") {
+    } else if (keyword == "RIGHT") {
       turnRight();
-    } else if (line == "STOP") {
+    } else if (keyword == "STOP") {
       stopMotors();
+    } else if (keyword == "SPEED") {
+      int speed = line.substring(commaIndex + 1).toInt();
+      setSpeed(speed);
     } else {
       Serial.println("Unknown command: " + line);
       stopMotors();
