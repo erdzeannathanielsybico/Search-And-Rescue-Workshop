@@ -4,23 +4,25 @@ Content for Hashim Search and Rescue Workshop inspired from STEM Competition Rob
 Project Context as of 25 June 2026
 Title: Save and Rescue Robots (decided by Fablab even though they were not agreeing before)
 
-The adjusted 7-day plan (~90–120 productive min/day):
+The adjusted 8-day plan (~90–120 productive min/day):
 
-Day 1 — Brief, Teams & Build. Mission, teams, safety, and straight into assembling the kit chassis: motors, wheels, mount the boards. One guided solder joint as a real taste. Win: a robot they built, and they've held a soldering iron.
+> **Pre-workshop instructor prep — not part of any student day.** Each team's laptop needs ROS 2, WSL2, and cross-machine networking (mirrored networking mode, matching `ROS_DOMAIN_ID`, the two Windows Firewall rules) working *before* Day 3 begins — see `ros2_journey.md` Journey 2. This has several non-obvious failure points (a symlink/Developer Mode gotcha, a stale-daemon issue after network changes, firewall rules that differ per team's domain ID) that took real troubleshooting even one-on-one — students should never be debugging this live. Set up and verify every team's laptop in advance, with a fallback plan (e.g. running the controller directly on the RPi via RDP) for any team whose networking can't be fixed in time. Also worth doing before Day 2: test the full firmware (drive + speed + claw) on an actual **Arduino Nano**, not just the ESP32 it's been prototyped on — the Nano has far fewer PWM-capable pins, and its `Servo` library claims a timer that can conflict with motor PWM once the claw is added.
 
-Day 2 — Arduino: Make It Move. Wire motors through the driver to the Arduino. Write (from a starter) the drive functions — forward, reverse, turn — understanding the code, not just flashing it. Add and program the servo claw. Win: they coded the robot to drive and grab.
+Day 1 — Brief, Teams & Build. Ice breakers and team grouping, then an overview of what the next 8 days look like. Straight into assembling the kit chassis: motors, wheels, mount the boards, one guided solder joint as a real taste. Win: a fully wired-up robot that powers on.
 
-Day 3 — Take Control. Add manual control (Bluetooth + phone app or a USB gamepad). They refine their own driving code, tune speeds and claw angles, and practice picking up objects. Win: a driveable robot they can control and tune.
+Day 2 — Arduino: Make It Move. Introduce VS Code and PlatformIO, plus enough Linux/project-structure basics to keep the codebase clean. Progression from hello world → blink → the L298N motor driver → the claw servo → any other actuators/sensors on the robot, each tested individually as they're wired in. Win: every actuator and sensor on the robot has been individually tested and responds to code they wrote.
 
-Day 4 — The Pi Brain: Connect & See. SSH into the Pi (real skill), tour Linux basics, run ros2 node list / topic list / echo, and bring up the live camera stream + camera node. They're now inside the robot's brain and seeing through its eye. Win: they can connect to and operate a ROS robot.
+Day 3 — ROS Foundations. No Bluetooth phone app or USB gamepad — control is laptop-only for the rest of the workshop, so this day is entirely about building a real mental model of ROS before depending on it: what ROS is and why it exists, the publish/subscribe model, Linux command basics. The concrete deliverable is writing their own working publisher and subscriber pair, so the structure isn't just theory. Win: everyone has a working mental model of ROS and has written and run their own pub/sub pair.
 
-Day 5 — Computer Vision They Build. The core attraction. Working from a provided OpenCV scaffold, they implement/tune the detection themselves — HSV color masking to find a target object, and read out where it is. This is the real "AI vision" skill, authored by them. Win: their code makes the robot recognize the rescue target.
+Day 4 — Serial: From Topic to Actuator. Turn Day 3's pub/sub knowledge into action — build the serial bridge node so messages published from the laptop reach the Arduino Nano and actually move something. Win: every actuator on the robot can be triggered from the laptop over ROS.
 
-Day 6 — Integrate: Autonomous-Assisted Rescue + Battle Prep. Connect vision to action — the Pi tells the robot where the target is; they drive (or let it assist) to grab and deliver it. Mount the battle pin, practice attack/defend. Win: vision + driving + claw working as one robot.
+Day 5 — Computer Vision They Build. Working from a provided OpenCV scaffold, they implement/tune HSV color detection themselves — find a target color in the camera frame and report where it is (left / right / center). Win: their code makes the robot see the target color and know where it is.
 
-Day 7 — Competition & Showcase. Two challenges — Rescue (vision-assisted: find and extract the specified objects) and Battle — then judged awards, certificates, and a showcase where each team explains what they built and coded. Win: they compete with a robot whose brain and code are genuinely theirs.
+Day 6 — Automation: Tracking. Combine vision and actuators — can start at the tail end of Day 5 if time allows. Build simple closed-loop automation: the robot turns to keep the tracked color centered, rather than reacting to single keypresses. Win: the robot autonomously tracks and centers on the target.
 
-Buffer day: customize as you wish.
+Day 7 — Buffer / Customization. Open day for experimentation and extra features — ultrasonic sensors, an LED strip that reacts to the detected color, whatever teams want to add.
+
+Day 8 — Competition & Showcase. Drive around the FabLab rescuing targets, using a mix of FPV (manual) and automatic (tracking) control, then judged awards, certificates, and a showcase where each team explains what they built and coded. Win: they compete with a robot whose brain and code are genuinely theirs.
 
 Story: we need to think of story for the camp (final scenario)- Mars Exploration (we need to further detail it)
 
