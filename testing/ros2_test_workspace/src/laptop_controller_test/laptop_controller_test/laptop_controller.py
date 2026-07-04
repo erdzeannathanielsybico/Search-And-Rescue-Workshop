@@ -21,6 +21,11 @@ KEY_TO_SPEED = {
     pygame.K_4: 255,
 }
 
+KEY_TO_CLAW = {
+    pygame.K_q: 'CLAW,OPEN',
+    pygame.K_w: 'CLAW,CLOSE',
+}
+
 # Placeholder window size — becomes the camera feed's resolution once that exists
 WINDOW_SIZE = (640, 480)
 
@@ -47,7 +52,7 @@ class LaptopController(Node):
         pygame.display.set_caption('Robot Controller')
         clock = pygame.time.Clock()
 
-        self.get_logger().info('Arrow keys drive, 1-4 set speed. Click the window first. Close it to quit.')
+        self.get_logger().info('Arrow keys drive, 1-4 set speed, Q/W open/close claw. Click the window first. Close it to quit.')
 
         running = True
         while running and rclpy.ok():
@@ -63,6 +68,8 @@ class LaptopController(Node):
                 elif event.type == pygame.KEYDOWN and event.key in KEY_TO_SPEED:
                     # A setting, not a held direction — fires once, no release handling.
                     self.publish_command(f'SPEED,{KEY_TO_SPEED[event.key]}')
+                elif event.type == pygame.KEYDOWN and event.key in KEY_TO_CLAW:
+                    self.publish_command(KEY_TO_CLAW[event.key])
 
             rclpy.spin_once(self, timeout_sec=0)
 

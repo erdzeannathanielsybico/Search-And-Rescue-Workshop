@@ -17,10 +17,10 @@ void setup() {
   claw.attach(SERVO_PIN);
 }
 
-void loop() {
-  // No delay() anywhere — instead, check "has enough time passed since the
-  // last step" on every loop() pass. This keeps loop() free to also handle
-  // serial commands, other actuators, etc. without waiting on the servo.
+// No delay() anywhere — instead, check "has enough time passed since the
+// last step" every time this is called. Keeps loop() free to also handle
+// serial commands, other actuators, etc. without waiting on the servo.
+void sweep() {
   unsigned long now = millis();
   if (now - lastStepTime >= stepIntervalMs) {
     lastStepTime = now;
@@ -32,4 +32,10 @@ void loop() {
 
     claw.write(angle);
   }
+}
+
+void loop() {
+  claw.write(60);
+  // 10 claw is fully open
+  // 60 claw is fully closed
 }

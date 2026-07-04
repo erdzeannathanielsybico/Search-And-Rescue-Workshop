@@ -1,6 +1,7 @@
 // Hardware: Arduino Nano (ATmega328P, new bootloader)
 
 #include <Arduino.h>
+#include <Servo.h>
 
 // --- Pin map from Hashim's PCB design ---
 // Each side's two motors are jumpered together on the board (both IN pins
@@ -13,8 +14,16 @@
 #define RIGHT_DIR_A  8   // IN1+IN3 of L298N #2 (jumpered)
 #define RIGHT_DIR_B  12  // IN2+IN4 of L298N #2 (jumpered)
 
+#define CLAW_SERVO_PIN 9  // Servo 1 (claw)
+
+// Angles found by testing in servo_test — not 0/180, these are this specific
+// claw's actual open/closed positions.
+#define CLAW_OPEN_ANGLE  10
+#define CLAW_CLOSE_ANGLE 60
+
+Servo claw;
+
 // Not wired up yet, reserved here so the pin map matches Hashim's PCB doc:
-// D9  (PWM) - Servo 1 (claw)
 // D10 (PWM) - Servo 2 (spare)
 // D6  (PWM) - Buzzer      -- shares Timer2 with LEFT_SPEED (D3). If the
 //                            buzzer is ever driven with tone(), it can
@@ -69,6 +78,8 @@ void setup() {
   pinMode(RIGHT_DIR_A, OUTPUT); pinMode(RIGHT_DIR_B, OUTPUT);
   pinMode(LEFT_SPEED, OUTPUT);  pinMode(RIGHT_SPEED, OUTPUT);
 
+  claw.attach(CLAW_SERVO_PIN);
+
   setSpeed(255);  // full speed by default, until a SPEED command says otherwise
   stopMotors();
   Serial.println("Setup complete. Starting motor test...");
@@ -98,6 +109,13 @@ void loop() {
     } else if (keyword == "SPEED") {
       int speed = line.substring(commaIndex + 1).toInt();
       setSpeed(speed);
+    } else if (keyword == "CLAW") {
+      String argument = line.substring(commaIndex + 1);
+      if (argument == "OPEN") {
+        claw.write(CLAW_OPEN_ANGLE);
+      } else if (argument == "CLOSE") {
+        claw.write(CLAW_CLOSE_ANGLE);
+      }
     } else {
       Serial.println("Unknown command: " + line);
       stopMotors();
