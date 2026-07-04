@@ -1,18 +1,35 @@
 #include <Arduino.h>
+// Needed adding `lib_deps = arduino-libraries/Servo` to platformio.ini —
+// unlike Arduino IDE, PlatformIO doesn't bundle Servo automatically and
+// failed to compile (Servo.h not found) until it was declared explicitly.
+#include <Servo.h>
 
-// put function declarations here:
-int myFunction(int, int);
+#define SERVO_PIN 9  // Servo 1 (claw) per Hashim's PCB pin map
+
+Servo claw;
+
+int angle = 0;
+int step = 1;
+unsigned long lastStepTime = 0;
+const unsigned long stepIntervalMs = 15;  // time between each 1-degree step
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+  claw.attach(SERVO_PIN);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
+  // No delay() anywhere — instead, check "has enough time passed since the
+  // last step" on every loop() pass. This keeps loop() free to also handle
+  // serial commands, other actuators, etc. without waiting on the servo.
+  unsigned long now = millis();
+  if (now - lastStepTime >= stepIntervalMs) {
+    lastStepTime = now;
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+    angle += step;
+    if (angle >= 180 || angle <= 0) {
+      step = -step;  // hit an end — reverse direction
+    }
+
+    claw.write(angle);
+  }
 }
