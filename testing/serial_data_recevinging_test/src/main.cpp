@@ -1,3 +1,5 @@
+// Hardware: ESP32 Dev Kit
+
 #include <Arduino.h>
 
 // --- Driver 1 (proven pins from previous project) ---
