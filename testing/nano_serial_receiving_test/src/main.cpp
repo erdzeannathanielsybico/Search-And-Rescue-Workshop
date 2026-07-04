@@ -79,6 +79,7 @@ void setup() {
   pinMode(LEFT_SPEED, OUTPUT);  pinMode(RIGHT_SPEED, OUTPUT);
 
   claw.attach(CLAW_SERVO_PIN);
+  claw.write(CLAW_OPEN_ANGLE);
 
   setSpeed(255);  // full speed by default, until a SPEED command says otherwise
   stopMotors();
