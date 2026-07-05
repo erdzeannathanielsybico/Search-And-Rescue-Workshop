@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-import serial   # pyserial — talks to the ESP32/Nano over the USB serial connection
+import serial   # pyserial — talks to the Arduino Nano over the USB serial connection
 
 
 class DirectionToSerial(Node):
@@ -11,7 +11,7 @@ class DirectionToSerial(Node):
         # declare_parameter lets the port/baud be overridden from the command line
         # without touching this file, e.g.:
         #   ros2 run serial_bridge_test direction_to_serial --ros-args -p serial_port:=/dev/ttyUSB1
-        self.declare_parameter('serial_port', '/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0')
+        self.declare_parameter('serial_port', '/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0')
         self.declare_parameter('baud_rate', 115200)
 
         port = self.get_parameter('serial_port').get_parameter_value().string_value
@@ -28,8 +28,9 @@ class DirectionToSerial(Node):
         self.get_logger().info(f'Listening: {direction.data}')
 
         # serial.write() needs bytes, not str — .encode() converts it.
-        # '\n' is appended so the ESP32 side can tell where one command ends
-        # and the next begins, once you write the code to read it there.
+        # '\n' is appended so the Nano side (with the new bootloader) can tell
+        # where one command ends and the next begins, once you write the code
+        # to read it there.
         self.serial_conn.write((direction.data + '\n').encode('utf-8'))
 
     def destroy_node(self):
