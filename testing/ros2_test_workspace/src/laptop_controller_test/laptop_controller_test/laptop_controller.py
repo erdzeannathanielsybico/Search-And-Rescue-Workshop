@@ -6,6 +6,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from sensor_msgs.msg import CompressedImage
+from rclpy.qos import qos_profile_sensor_data
 
 KEY_TO_COMMAND = {
     pygame.K_UP: 'FORWARD',
@@ -29,16 +30,19 @@ KEY_TO_CLAW = {
     pygame.K_w: 'CLAW,CLOSE',
 }
 
-# Placeholder window size — becomes the camera feed's resolution once that exists
-WINDOW_SIZE = (640, 480)
+# Matches the camera feed's requested resolution (camera_feed_publisher.py)
+WINDOW_SIZE = (1280, 720)
 
 
 class LaptopController(Node):
     def __init__(self):
         super().__init__('laptop_controller')
         self.publisher = self.create_publisher(String, 'Direction', 10)
+        # QoS must match the publisher's (best-effort, shallow queue) or the
+        # two won't connect at all — a reliable subscriber can't pair with a
+        # best-effort publisher in DDS.
         self.camera_subscription = self.create_subscription(
-            CompressedImage, 'CameraFeed', self.on_camera_frame, 10)
+            CompressedImage, 'CameraFeed', self.on_camera_frame, qos_profile_sensor_data)
         self.current_key = None  # which arrow key (if any) is currently held down
         self.last_command = 'STOP'
         self.latest_frame_surface = None  # None until the first camera frame arrives
