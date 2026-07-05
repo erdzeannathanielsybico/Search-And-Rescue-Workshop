@@ -16,7 +16,7 @@ class CameraFeedPublisher(Node):
         if not self.cap.isOpened():
             self.get_logger().error(f'Could not open camera index {camera_index}')
 
-        self.publisher = self.create_publisher(CompressedImage, 'camera_feed', 10)
+        self.publisher = self.create_publisher(CompressedImage, 'CameraFeed', 10)
         self.timer = self.create_timer(1 / 30, self.publish_frame)
 
     def publish_frame(self):
