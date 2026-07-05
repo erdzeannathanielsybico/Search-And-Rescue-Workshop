@@ -1,8 +1,11 @@
+import cv2
+import numpy as np
 import pygame
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from sensor_msgs.msg import CompressedImage
 
 KEY_TO_COMMAND = {
     pygame.K_UP: 'FORWARD',
@@ -34,8 +37,23 @@ class LaptopController(Node):
     def __init__(self):
         super().__init__('laptop_controller')
         self.publisher = self.create_publisher(String, 'Direction', 10)
+        self.camera_subscription = self.create_subscription(
+            CompressedImage, 'CameraFeed', self.on_camera_frame, 10)
         self.current_key = None  # which arrow key (if any) is currently held down
         self.last_command = 'STOP'
+        self.latest_frame_surface = None  # None until the first camera frame arrives
+
+    def on_camera_frame(self, msg):
+        # msg.data is already JPEG-encoded bytes — decode back into a BGR image
+        jpeg_bytes = np.frombuffer(msg.data, dtype=np.uint8)
+        frame = cv2.imdecode(jpeg_bytes, cv2.IMREAD_COLOR)
+        if frame is None:
+            return
+
+        # pygame expects RGB, OpenCV decodes as BGR
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        height, width, _ = frame.shape
+        self.latest_frame_surface = pygame.image.frombuffer(frame.tobytes(), (width, height), 'RGB')
 
     def publish_command(self, command):
         if command == self.last_command:
@@ -73,7 +91,10 @@ class LaptopController(Node):
 
             rclpy.spin_once(self, timeout_sec=0)
 
-            screen.fill((30, 30, 30))  # plain background until the camera feed replaces this
+            if self.latest_frame_surface is not None:
+                screen.blit(self.latest_frame_surface, (0, 0))
+            else:
+                screen.fill((30, 30, 30))  # placeholder until the first frame arrives
             pygame.display.flip()
             clock.tick(30)  # 30 fps cap — matches a typical webcam rate
 
