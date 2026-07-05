@@ -102,6 +102,24 @@ Use the full `/dev/serial/by-id/...` path (not the `ttyUSB0` it resolves to) whe
 
 **Fix:** Always `cd` into the workspace root (`testing/ros2_test_workspace/`) before running `colcon build`, `source install/setup.bash`, or `ros2 run`. If stray artifacts appear elsewhere, they're safe to delete — they're just regenerated build output, not source code.
 
+### Camera feed over ROS2 — wobbly video despite low latency (wrong pixel format)
+**Symptom:** Video looked smooth in other apps on the same machine (e.g. Windows' built-in camera app) even when shaking/moving the camera fast, but was wobbly/juddery once streamed over the ROS2 `CameraFeed` topic — the wobble persisted regardless of `CAP_PROP_BUFFERSIZE` (tried 1 through 50, barely any difference), so it wasn't a buffering/latency problem.
+
+**Cause:** `cv2.VideoCapture`'s V4L2 backend was negotiating raw **YUYV** instead of the camera's hardware **MJPG** encoder. Uncompressed YUYV at 1280x720@30fps needs ~66MB/s, more than the bus reliably sustains, so frames arrive at irregular intervals instead of cleanly dropping to a lower fps — that irregular timing is what reads as wobble. Confirmed with:
+```bash
+v4l2-ctl --list-formats-ext -d /dev/video0
+```
+which showed YUYV capped at a few fps for larger sizes, while MJPG held a steady 30fps at 1280x720.
+
+**Fix:** Force the FourCC to MJPG *before* setting width/height (V4L2 only applies the format change at that point), and pin the backend explicitly so property order is respected:
+```python
+self.cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+```
+See `camera_feed_test/camera_feed_publisher.py`.
+
 ---
 
 ## Confirmed Hardware & Software
@@ -197,5 +215,18 @@ Click the window first so it has keyboard focus, then use the arrow keys.
 
 **This requires cross-machine ROS 2 networking to be set up first** (laptop and RPi are two separate machines on the LAN, not two nodes on one machine) — see `ros2_journey.md` Journey 2, step 8, for WSL2 mirrored networking, matching `ROS_DOMAIN_ID`, and the two Windows Firewall rules (ICMP + DDS UDP port range) that were needed.
 
-**✅ Confirmed working end-to-end:** laptop keypress (pygame) → `Direction` topic over the cross-machine ROS 2 network → RPi's `direction_to_serial` → serial → ESP32 (`main.cpp`) → motors actually drive. Full chain, both machines, tested and working.
+### camera_feed_test (testing/ros2_test_workspace/src/camera_feed_test)
+
+Runs **on the RPi**. `camera_feed_publisher` opens the Logitech C310 (`cv2.VideoCapture`, V4L2 backend, hardware MJPG — see the wobble fix above) at 1280x720 and publishes each frame as a JPEG-encoded `sensor_msgs/CompressedImage` on the `CameraFeed` topic, using `qos_profile_sensor_data` — same reasoning as `Direction`: on a network hiccup, video should drop stale frames rather than queue them up and add lag.
+
+`laptop_controller_test`'s `laptop_controller` node subscribes to `CameraFeed` and decodes/displays each frame in the same pygame window used for keyboard control, so one window shows the live feed while driving.
+
+```bash
+# On the RPi
+cd testing/ros2_test_workspace
+source install/setup.bash
+ros2 run camera_feed_test camera_feed_publisher
+```
+
+**✅ Confirmed working end-to-end:** all three nodes running simultaneously across both machines — laptop keypress (pygame) → `Direction` topic over the cross-machine ROS 2 network → RPi's `direction_to_serial` → serial → ESP32 (`main.cpp`) → motors actually drive, **at the same time as** the RPi's `camera_feed_publisher` → `CameraFeed` topic → the laptop's pygame window, showing live 720p video while driving. Full chain, both machines, tested and working.
 

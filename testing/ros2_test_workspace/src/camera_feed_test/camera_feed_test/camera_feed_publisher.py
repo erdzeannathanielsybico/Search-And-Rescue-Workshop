@@ -13,10 +13,20 @@ class CameraFeedPublisher(Node):
         self.declare_parameter('camera_index', 0)
         camera_index = self.get_parameter('camera_index').get_parameter_value().integer_value
 
-        self.cap = cv2.VideoCapture(camera_index)
+        # Pin the V4L2 backend explicitly so property-setting order below is
+        # respected consistently (some backends silently reorder/ignore sets).
+        self.cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
         if not self.cap.isOpened():
             self.get_logger().error(f'Could not open camera index {camera_index}')
 
+        # Force the camera's hardware MJPG encoder instead of raw YUYV. Must
+        # be set before width/height — V4L2 only applies it at that point.
+        # Raw YUYV at 1280x720@30fps needs ~66MB/s, more than the bus can
+        # sustain, so frames arrive irregularly (the wobble) instead of at a
+        # clean, lower, steady fps. MJPG is compressed in-camera and holds a
+        # steady 30fps at this resolution (confirmed via
+        # `v4l2-ctl --list-formats-ext`).
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         # Keep only 1 frame in OpenCV's own capture buffer — otherwise read()
