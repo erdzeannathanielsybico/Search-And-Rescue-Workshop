@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'automatic_direction_controller = automatic_direction_test.automatic_direction_controller:main',
         ],
     },
 )

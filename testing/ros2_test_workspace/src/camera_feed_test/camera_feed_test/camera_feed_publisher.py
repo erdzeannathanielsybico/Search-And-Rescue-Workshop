@@ -48,9 +48,15 @@ class CameraFeedPublisher(Node):
         # profile for exactly this (best-effort, shallow queue depth).
         self.publisher = self.create_publisher(CompressedImage, 'CameraFeed', qos_profile_sensor_data)
 
-        # RAW = publish frames untouched (fastest). BOX = also run HSV
-        # detection and draw a box + position around the tracked color.
-        # Only ever publishing one — laptop_controller picks which via a keypress.
+        # Detection runs every frame regardless of view mode — automatic
+        # driving needs it even while the HUD is showing RAW. TargetDetails
+        # uses the same best-effort QoS as CameraFeed: a stale detection
+        # shouldn't be queued/retried, only the latest one ever matters.
+        self.target_details_publisher = self.create_publisher(String, 'TargetDetails', qos_profile_sensor_data)
+
+        # RAW = publish frames untouched (fastest). BOX = also draw a box +
+        # position around the detected target. Only ever publishing one —
+        # laptop_controller picks which via a keypress.
         self.view_mode = 'RAW'
         self.view_mode_subscription = self.create_subscription(
             String, 'CameraViewMode', self.on_view_mode, 10)
@@ -60,10 +66,9 @@ class CameraFeedPublisher(Node):
     def on_view_mode(self, msg):
         self.view_mode = msg.data
 
-    def draw_target_box(self, frame):
+    def detect_target(self, frame):
+        """Return (color_name, bbox) for the highest-priority color with a match, or (None, None)."""
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        color_name, bbox = None, None
         for candidate in COLOR_PRIORITY:
             lower, upper = color_detection_tool.range_for_color(candidate)
             mask = cv2.inRange(hsv, lower, upper)
@@ -71,9 +76,25 @@ class CameraFeedPublisher(Node):
             mask = cv2.dilate(mask, None, iterations=2)
             bbox = color_detection_tool.find_target(mask)
             if bbox is not None:
-                color_name = candidate
-                break
+                return candidate, bbox
+        return None, None
 
+    def publish_target_details(self, frame_width, color_name, bbox):
+        if bbox is None:
+            data = 'NONE'
+        else:
+            x, y, w, h = bbox
+            cx = x + w // 2
+            # -1.0 (fully left) .. 0.0 (centered) .. 1.0 (fully right) —
+            # matches the convention automatic_direction_controller expects.
+            offset = (cx - frame_width / 2) / (frame_width / 2)
+            data = f'{color_name},{offset:.2f}'
+
+        msg = String()
+        msg.data = data
+        self.target_details_publisher.publish(msg)
+
+    def draw_target_box(self, frame, color_name, bbox):
         frame_width = frame.shape[1]
         if bbox is None:
             cv2.putText(frame, 'NONE', (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
@@ -98,8 +119,11 @@ class CameraFeedPublisher(Node):
         if not ret:
             return
 
+        color_name, bbox = self.detect_target(frame)
+        self.publish_target_details(frame.shape[1], color_name, bbox)
+
         if self.view_mode == 'BOX':
-            frame = self.draw_target_box(frame)
+            frame = self.draw_target_box(frame, color_name, bbox)
 
         ok, encoded = cv2.imencode('.jpg', frame)
         if not ok:
