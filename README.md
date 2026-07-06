@@ -57,6 +57,29 @@ Tasks:
 
 ---
 
+## Plan — 2026-07-06: finalize automatic tracking + claw grab
+
+**First task today:** `laptop_controller` and the Nano need to support directional commands with a speed value (e.g. `LEFT,180` / `RIGHT,90`), not just plain `LEFT`/`RIGHT`. This is groundwork the automatic-tracking node depends on later — it needs to turn *proportionally* (speed up the turn the further off-center the target is), not just snap to a fixed on/off turn.
+
+**Full architecture being built out today/next:**
+
+Topics:
+- `ManualDirection` — laptop_controller's raw keyboard output (rename of today's `Direction`)
+- `AutomaticDirection` — output of the new color-tracking node: converts the target's position (from `color_detection.py`'s saved HSV ranges) into `LEFT`/`RIGHT`/`FORWARD`-with-speed commands to keep it centered
+- `ControlMode` — current mode (`MANUAL`/`AUTO`), broadcast for the GUI and the command switcher — sourced from what the Nano actually reports, never assumed from the last command sent
+- `Direction` — the final, merged command stream that reaches `direction_to_serial`, unchanged from how it works today
+
+Nodes:
+- **Command switcher** (new) — subscribes to `ManualDirection`, `AutomaticDirection`, `ControlMode`; forwards whichever source is currently active onto `Direction`. Its whole job is that one if/else — no vision, no serial.
+- **Color-tracking node** (new) — reads the target's position (from the camera side) and publishes `AutomaticDirection` commands to keep it centered.
+- **`direction_to_serial`** (existing, gets extended) — write side stays exactly as-is (relay `Direction` to serial verbatim); new read side polls incoming serial lines from the Nano (distance + mode reports) and republishes them as ROS topics (`ControlMode`, a distance topic for the HUD). It doesn't decide anything — just reports what the Nano says, same "don't interpret, just pass through" philosophy as the write side.
+- **`camera_feed_publisher`** (existing, gets extended) — subscribes to a new `CameraViewMode` topic (raw/mask/box), published by `laptop_controller` on a keypress, and renders the feed accordingly before publishing `CameraFeed`.
+- **Nano firmware** — owns the actual auto/manual decision: runs the ultrasonic check locally, and once the target's close enough, closes the claw and reverts to manual — regardless of what commands are still arriving — then reports the new mode + distance back up over serial. This is deliberately the final authority/backstop, so a stray stale automatic command right at the mode transition can't cause a bad grab.
+
+**Why mode-toggle bypasses the command switcher:** the key that triggers auto/manual publishes straight onto `Direction` as a plain control string, the same way `SPEED,180` / `CLAW,OPEN` do today — `direction_to_serial` doesn't need to understand it, it just relays it to the Nano like anything else.
+
+---
+
 ## Known Issues & Fixes
 
 ### Raspberry Pi — WiFi connects but no internet (missing default route)
@@ -227,6 +250,21 @@ cd testing/ros2_test_workspace
 source install/setup.bash
 ros2 run camera_feed_test camera_feed_publisher
 ```
+
+### color_detection.py (testing/ros2_test_workspace/src/camera_feed_test/camera_feed_test/color_detection.py)
+
+Standalone HSV color-tuning tool — **not a ROS2 node**, run directly with `python3 color_detection.py` (no `colcon build`/`ros2 run` needed). Its only job is finding and saving the HSV threshold range that isolates a target color (e.g. a rescue target) in the camera feed, robust to lighting changes. It doesn't publish anything itself — its only lasting output is `color_ranges.json`, written next to the script, which other code reads via `range_for_color()` instead of re-tuning from scratch (planned consumers: `camera_feed_publisher` for HUD overlays, and a future color-tracking node for autonomous driving).
+
+Uses HSV, not RGB — Hue/Saturation/Value separates a color's identity from lighting brightness, so a threshold tuned once holds up much better than an RGB threshold would as light changes. Red is the one color that needs care: it sits at both ends of OpenCV's Hue wheel (0-179), so a single min/max range only catches one side of it. Green and blue don't have this problem and are generally the easiest, most reliable colors to detect indoors (uncommon in backgrounds/skin tones, no hue wraparound) — worth steering teams toward those if red isn't required by the theme.
+
+**How to use:**
+1. Run the script. Three windows open: **Camera** (live feed with a detection box + label), **Mask** (black/white threshold preview), **HSV Tuning** (six sliders).
+2. Press **1 / 2 / 3** to load a starting point for RED / GREEN / BLUE onto the sliders — the last saved range for that color if one exists, otherwise a rough default.
+3. Adjust the sliders while watching the **Mask** window: the goal is white only where the target object is, black everywhere else. Narrow `H Min`/`H Max` first, then raise `S Min`/`V Min` to kill background noise (shadows, skin tone, walls).
+4. Press **S** to save the current sliders under the active color's name into `color_ranges.json`.
+5. Press **Q** to quit.
+
+Saved ranges reflect whatever lighting was present at save time — if venue lighting differs on the actual day, budget a few minutes to re-tune and re-save rather than trusting old saved values.
 
 **✅ Confirmed working end-to-end:** all three nodes running simultaneously across both machines — laptop keypress (pygame) → `Direction` topic over the cross-machine ROS 2 network → RPi's `direction_to_serial` → serial → ESP32 (`main.cpp`) → motors actually drive, **at the same time as** the RPi's `camera_feed_publisher` → `CameraFeed` topic → the laptop's pygame window, showing live 720p video while driving. Full chain, both machines, tested and working.
 
