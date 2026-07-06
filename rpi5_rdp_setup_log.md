@@ -46,3 +46,9 @@ Full GUI remote desktop access from a Windows PC to the Raspberry Pi 5, using RD
 - If the RPi's IP changes (e.g. router reboot), you may need to find the new IP via `hostname -I` in terminal or check your router's device list.
 - This is purely for local network use — not accessible from outside your home network without extra configuration.
 - SSH (PowerShell) still works alongside this for terminal-only tasks: `ssh nathaniel@192.168.1.82`
+
+
+## SHUTDOWN BUTTON
+https://peppe8o.com/shutdown-button-raspberry-pi/
+
+1. Disable the 60-Second Logout/Shutdown Prompt (GNOME)By default, Ubuntu's GNOME desktop shows a 60-second countdown before automatically shutting down when you click shut down from the UI.Open your terminal (Ctrl + Alt + T).Run this command to disable the prompt entirely:bashgsettings set org.gnome.SessionManager logout-prompt false
