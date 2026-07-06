@@ -136,6 +136,12 @@ void loop() {
       String argument = line.substring(commaIndex + 1);
       if (argument == "AUTO" || argument == "MANUAL") {
         currentMode = argument;
+        if (currentMode == "MANUAL") {
+          // Halt immediately on entering manual, regardless of what was
+          // driving before — this is the emergency-override path, it can't
+          // wait on a STOP command surviving a round trip back through ROS.
+          stopMotors();
+        }
         Serial.println("MODE," + currentMode);
       }
     } else {

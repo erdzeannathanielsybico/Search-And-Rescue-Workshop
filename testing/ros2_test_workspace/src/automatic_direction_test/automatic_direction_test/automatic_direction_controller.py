@@ -36,25 +36,22 @@ class AutomaticDirectionController(Node):
         self.subscription = self.create_subscription(
             String, 'TargetDetails', self.on_target_details, qos_profile_sensor_data)
         self.publisher = self.create_publisher(String, 'AutomaticDirection', 10)
-        self.last_direction = None  # dedupe FORWARD/STOP, same idea as laptop_controller's keys
 
     def on_target_details(self, msg):
+        # No dedupe here on purpose — command_switcher may have been dropping
+        # every message while we weren't the active mode, so there's no way
+        # to know the Nano actually has our last-sent state. Resend fresh
+        # every cycle instead of trusting local memory of what was "already sent".
         if msg.data == 'NONE':
-            self.publish_direction('STOP')
+            self.publish('STOP')
             return
 
         _color, offset_str = msg.data.split(',')
         offset = float(offset_str)
         left, right = compute_speeds(offset)
 
-        self.publish_direction('FORWARD')
+        self.publish('FORWARD')
         self.publish(f'SPEED,{left},{right}')
-
-    def publish_direction(self, direction):
-        if direction == self.last_direction:
-            return
-        self.last_direction = direction
-        self.publish(direction)
 
     def publish(self, data):
         msg = String()
