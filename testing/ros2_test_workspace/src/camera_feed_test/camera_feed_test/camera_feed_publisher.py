@@ -2,8 +2,15 @@ import cv2
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import String
 from sensor_msgs.msg import CompressedImage
 from rclpy.qos import qos_profile_sensor_data
+
+from camera_feed_test import color_detection
+
+# Only color tuned in color_ranges.json so far — swap or make this a
+# parameter once more than one target color needs tracking.
+TRACKED_COLOR = 'BLUE'
 
 
 class CameraFeedPublisher(Node):
@@ -39,12 +46,52 @@ class CameraFeedPublisher(Node):
         # of dropping them. qos_profile_sensor_data is the standard ROS 2
         # profile for exactly this (best-effort, shallow queue depth).
         self.publisher = self.create_publisher(CompressedImage, 'CameraFeed', qos_profile_sensor_data)
+
+        # RAW = publish frames untouched (fastest). BOX = also run HSV
+        # detection and draw a box + position around the tracked color.
+        # Only ever publishing one — laptop_controller picks which via a keypress.
+        self.view_mode = 'RAW'
+        self.view_mode_subscription = self.create_subscription(
+            String, 'CameraViewMode', self.on_view_mode, 10)
+
         self.timer = self.create_timer(1 / 30, self.publish_frame)
+
+    def on_view_mode(self, msg):
+        self.view_mode = msg.data
+
+    def draw_target_box(self, frame):
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        lower, upper = color_detection.range_for_color(TRACKED_COLOR)
+        mask = cv2.inRange(hsv, lower, upper)
+        mask = cv2.erode(mask, None, iterations=2)
+        mask = cv2.dilate(mask, None, iterations=2)
+
+        bbox = color_detection.find_target(mask)
+        frame_width = frame.shape[1]
+        if bbox is None:
+            position = 'NONE'
+        else:
+            x, y, w, h = bbox
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cx = x + w // 2
+            if cx < frame_width / 3:
+                position = 'LEFT'
+            elif cx > frame_width * 2 / 3:
+                position = 'RIGHT'
+            else:
+                position = 'CENTER'
+
+        cv2.putText(frame, f'{TRACKED_COLOR} {position}', (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        return frame
 
     def publish_frame(self):
         ret, frame = self.cap.read()
         if not ret:
             return
+
+        if self.view_mode == 'BOX':
+            frame = self.draw_target_box(frame)
 
         ok, encoded = cv2.imencode('.jpg', frame)
         if not ok:

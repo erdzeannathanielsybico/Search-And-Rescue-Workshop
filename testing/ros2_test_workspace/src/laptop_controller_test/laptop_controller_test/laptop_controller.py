@@ -30,6 +30,11 @@ KEY_TO_CLAW = {
     pygame.K_w: 'CLAW,CLOSE',
 }
 
+KEY_TO_VIEW_MODE = {
+    pygame.K_9: 'RAW',
+    pygame.K_0: 'BOX',
+}
+
 # Matches the camera feed's requested resolution (camera_feed_publisher.py)
 WINDOW_SIZE = (1280, 720)
 
@@ -43,8 +48,10 @@ class LaptopController(Node):
         # best-effort publisher in DDS.
         self.camera_subscription = self.create_subscription(
             CompressedImage, 'CameraFeed', self.on_camera_frame, qos_profile_sensor_data)
+        self.view_mode_publisher = self.create_publisher(String, 'CameraViewMode', 10)
         self.current_key = None  # which arrow key (if any) is currently held down
         self.last_command = 'STOP'
+        self.last_view_mode = 'RAW'  # matches camera_feed_publisher's own default
         self.latest_frame_surface = None  # None until the first camera frame arrives
 
     def on_camera_frame(self, msg):
@@ -68,13 +75,24 @@ class LaptopController(Node):
         self.publisher.publish(msg)
         self.get_logger().info(f'Publishing: {command}')
 
+    def publish_view_mode(self, mode):
+        if mode == self.last_view_mode:
+            return
+        self.last_view_mode = mode
+        msg = String()
+        msg.data = mode
+        self.view_mode_publisher.publish(msg)
+        self.get_logger().info(f'Camera view mode: {mode}')
+
     def run(self):
         pygame.init()
         screen = pygame.display.set_mode(WINDOW_SIZE)
         pygame.display.set_caption('Robot Controller')
         clock = pygame.time.Clock()
 
-        self.get_logger().info('Arrow keys drive, 1-4 set speed, Q/W open/close claw. Click the window first. Close it to quit.')
+        self.get_logger().info(
+            'Arrow keys drive, 1-4 set speed, Q/W open/close claw, 9/0 raw/box view. '
+            'Click the window first. Close it to quit.')
 
         running = True
         while running and rclpy.ok():
@@ -89,9 +107,14 @@ class LaptopController(Node):
                     self.publish_command('STOP')
                 elif event.type == pygame.KEYDOWN and event.key in KEY_TO_SPEED:
                     # A setting, not a held direction — fires once, no release handling.
-                    self.publish_command(f'SPEED,{KEY_TO_SPEED[event.key]}')
+                    # Left/right are equal here — manual driving has no need to
+                    # bias one side, that's only for automatic tracking later.
+                    speed = KEY_TO_SPEED[event.key]
+                    self.publish_command(f'SPEED,{speed},{speed}')
                 elif event.type == pygame.KEYDOWN and event.key in KEY_TO_CLAW:
                     self.publish_command(KEY_TO_CLAW[event.key])
+                elif event.type == pygame.KEYDOWN and event.key in KEY_TO_VIEW_MODE:
+                    self.publish_view_mode(KEY_TO_VIEW_MODE[event.key])
 
             rclpy.spin_once(self, timeout_sec=0)
 

@@ -59,7 +59,7 @@ Tasks:
 
 ## Plan — 2026-07-06: finalize automatic tracking + claw grab
 
-**First task today:** `laptop_controller` and the Nano need to support directional commands with a speed value (e.g. `LEFT,180` / `RIGHT,90`), not just plain `LEFT`/`RIGHT`. This is groundwork the automatic-tracking node depends on later — it needs to turn *proportionally* (speed up the turn the further off-center the target is), not just snap to a fixed on/off turn.
+**First task today:** ~~directional commands carry a speed value~~ — corrected: direction commands (`FORWARD`/`BACKWARD`/`LEFT`/`RIGHT`/`STOP`) stay exactly as they are, manual mode keeps its simple tank-pivot turns. Instead, `SPEED` itself becomes two independent values — `SPEED,<left>,<right>` instead of one shared value for both sides. Manual mode always sends matching left/right values (a plain speed setting); this is groundwork for automatic tracking, which will steer by biasing one side faster than the other while driving `FORWARD` — line-follower style — rather than pivoting with `LEFT`/`RIGHT`.
 
 **Full architecture being built out today/next:**
 

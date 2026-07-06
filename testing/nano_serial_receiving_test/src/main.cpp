@@ -66,9 +66,13 @@ void turnRight() {
 // Speed lives entirely on the two speed pins as a PWM duty cycle (0-255),
 // separate from the direction pins above — so changing speed never needs
 // to know or touch the current direction, and vice versa.
-void setSpeed(int speed) {
-  analogWrite(LEFT_SPEED, speed);
-  analogWrite(RIGHT_SPEED, speed);
+// Left and right are independent on purpose: manual mode always sends equal
+// values (a plain speed setting), but automatic tracking will steer while
+// moving FORWARD by biasing one side faster than the other, line-follower
+// style, instead of pivoting with LEFT/RIGHT.
+void setSpeed(int leftSpeed, int rightSpeed) {
+  analogWrite(LEFT_SPEED, leftSpeed);
+  analogWrite(RIGHT_SPEED, rightSpeed);
 }
 
 void setup() {
@@ -81,7 +85,7 @@ void setup() {
   claw.attach(CLAW_SERVO_PIN);
   claw.write(CLAW_OPEN_ANGLE); // NEVER FORGET OR ELSE SERVO WILL BREAK
 
-  setSpeed(255);  // full speed by default, until a SPEED command says otherwise
+  setSpeed(255, 255);  // full speed by default, until a SPEED command says otherwise
   stopMotors();
   Serial.println("Setup complete. Starting motor test...");
 }
@@ -92,8 +96,8 @@ void loop() {
     line.trim();
     if (line.length() == 0) return;
 
-    // Every command is a plain word, except SPEED, which carries a value:
-    // "SPEED,180" — split off the part after the comma, if there is one.
+    // Every command is a plain word, except SPEED (two values, "SPEED,180,220")
+    // and CLAW (one value, "CLAW,OPEN") — split off the part after the comma.
     int commaIndex = line.indexOf(',');
     String keyword = (commaIndex == -1) ? line : line.substring(0, commaIndex);
 
@@ -108,8 +112,12 @@ void loop() {
     } else if (keyword == "STOP") {
       stopMotors();
     } else if (keyword == "SPEED") {
-      int speed = line.substring(commaIndex + 1).toInt();
-      setSpeed(speed);
+      // "SPEED,<left>,<right>" — split the remainder on its own comma.
+      String args = line.substring(commaIndex + 1);
+      int secondComma = args.indexOf(',');
+      int leftSpeed = args.substring(0, secondComma).toInt();
+      int rightSpeed = args.substring(secondComma + 1).toInt();
+      setSpeed(leftSpeed, rightSpeed);
     } else if (keyword == "CLAW") {
       String argument = line.substring(commaIndex + 1);
       if (argument == "OPEN") {
