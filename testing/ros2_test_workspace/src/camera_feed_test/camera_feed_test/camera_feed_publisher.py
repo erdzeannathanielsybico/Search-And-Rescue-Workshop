@@ -6,11 +6,12 @@ from std_msgs.msg import String
 from sensor_msgs.msg import CompressedImage
 from rclpy.qos import qos_profile_sensor_data
 
-from camera_feed_test import color_detection
+from camera_feed_test import color_detection_tool
 
-# Only color tuned in color_ranges.json so far — swap or make this a
-# parameter once more than one target color needs tracking.
-TRACKED_COLOR = 'BLUE'
+# Checked in this order — first color whose saved range finds a target
+# wins. Sequential, not simultaneous, so two differently-colored objects
+# in frame at once don't produce two competing detections.
+COLOR_PRIORITY = ['RED', 'GREEN', 'BLUE']
 
 
 class CameraFeedPublisher(Node):
@@ -61,27 +62,34 @@ class CameraFeedPublisher(Node):
 
     def draw_target_box(self, frame):
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        lower, upper = color_detection.range_for_color(TRACKED_COLOR)
-        mask = cv2.inRange(hsv, lower, upper)
-        mask = cv2.erode(mask, None, iterations=2)
-        mask = cv2.dilate(mask, None, iterations=2)
 
-        bbox = color_detection.find_target(mask)
+        color_name, bbox = None, None
+        for candidate in COLOR_PRIORITY:
+            lower, upper = color_detection_tool.range_for_color(candidate)
+            mask = cv2.inRange(hsv, lower, upper)
+            mask = cv2.erode(mask, None, iterations=2)
+            mask = cv2.dilate(mask, None, iterations=2)
+            bbox = color_detection_tool.find_target(mask)
+            if bbox is not None:
+                color_name = candidate
+                break
+
         frame_width = frame.shape[1]
         if bbox is None:
-            position = 'NONE'
-        else:
-            x, y, w, h = bbox
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            cx = x + w // 2
-            if cx < frame_width / 3:
-                position = 'LEFT'
-            elif cx > frame_width * 2 / 3:
-                position = 'RIGHT'
-            else:
-                position = 'CENTER'
+            cv2.putText(frame, 'NONE', (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            return frame
 
-        cv2.putText(frame, f'{TRACKED_COLOR} {position}', (20, 40),
+        x, y, w, h = bbox
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cx = x + w // 2
+        if cx < frame_width / 3:
+            position = 'LEFT'
+        elif cx > frame_width * 2 / 3:
+            position = 'RIGHT'
+        else:
+            position = 'CENTER'
+
+        cv2.putText(frame, f'{color_name} {position}', (20, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         return frame
 

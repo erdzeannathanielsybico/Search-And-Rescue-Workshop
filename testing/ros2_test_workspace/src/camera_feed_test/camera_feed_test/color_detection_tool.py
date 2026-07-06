@@ -1,6 +1,6 @@
 """
 Standalone HSV color-tuning tool — not a ROS2 node, run directly with
-`python3 color_detection.py`.
+`python3 color_detection_tool.py`.
 
 Purpose: find and save the HSV threshold range that isolates a target color
 (e.g. a rescue target) in the camera feed, independent of lighting. This

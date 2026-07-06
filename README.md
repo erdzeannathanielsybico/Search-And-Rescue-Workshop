@@ -65,7 +65,7 @@ Tasks:
 
 Topics:
 - `ManualDirection` — laptop_controller's raw keyboard output (rename of today's `Direction`)
-- `AutomaticDirection` — output of the new color-tracking node: converts the target's position (from `color_detection.py`'s saved HSV ranges) into `LEFT`/`RIGHT`/`FORWARD`-with-speed commands to keep it centered
+- `AutomaticDirection` — output of the new color-tracking node: converts the target's position (from `color_detection_tool.py`'s saved HSV ranges) into `LEFT`/`RIGHT`/`FORWARD`-with-speed commands to keep it centered
 - `ControlMode` — current mode (`MANUAL`/`AUTO`), broadcast for the GUI and the command switcher — sourced from what the Nano actually reports, never assumed from the last command sent
 - `Direction` — the final, merged command stream that reaches `direction_to_serial`, unchanged from how it works today
 
@@ -251,9 +251,9 @@ source install/setup.bash
 ros2 run camera_feed_test camera_feed_publisher
 ```
 
-### color_detection.py (testing/ros2_test_workspace/src/camera_feed_test/camera_feed_test/color_detection.py)
+### color_detection_tool.py (testing/ros2_test_workspace/src/camera_feed_test/camera_feed_test/color_detection_tool.py)
 
-Standalone HSV color-tuning tool — **not a ROS2 node**, run directly with `python3 color_detection.py` (no `colcon build`/`ros2 run` needed). Its only job is finding and saving the HSV threshold range that isolates a target color (e.g. a rescue target) in the camera feed, robust to lighting changes. It doesn't publish anything itself — its only lasting output is `color_ranges.json`, written next to the script, which other code reads via `range_for_color()` instead of re-tuning from scratch (planned consumers: `camera_feed_publisher` for HUD overlays, and a future color-tracking node for autonomous driving).
+Standalone HSV color-tuning tool — **not a ROS2 node**, run directly with `python3 color_detection_tool.py` (no `colcon build`/`ros2 run` needed). Its only job is finding and saving the HSV threshold range that isolates a target color (e.g. a rescue target) in the camera feed, robust to lighting changes. It doesn't publish anything itself — its only lasting output is `color_ranges.json`, written next to the script, which other code reads via `range_for_color()` instead of re-tuning from scratch (planned consumers: `camera_feed_publisher` for HUD overlays, and a future color-tracking node for autonomous driving).
 
 Uses HSV, not RGB — Hue/Saturation/Value separates a color's identity from lighting brightness, so a threshold tuned once holds up much better than an RGB threshold would as light changes. Red is the one color that needs care: it sits at both ends of OpenCV's Hue wheel (0-179), so a single min/max range only catches one side of it. Green and blue don't have this problem and are generally the easiest, most reliable colors to detect indoors (uncommon in backgrounds/skin tones, no hue wraparound) — worth steering teams toward those if red isn't required by the theme.
 
