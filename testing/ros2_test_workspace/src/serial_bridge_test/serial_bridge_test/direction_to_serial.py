@@ -32,6 +32,7 @@ class DirectionToSerial(Node):
         # rclpy subscriptions only fire on incoming ROS messages, not on serial
         # activity — poll for lines the Nano sends on its own (e.g. "MODE,AUTO").
         self.read_timer = self.create_timer(0.02, self.read_from_nano)
+        self.last_logged_mode = None  # only for logging — ControlMode itself is still republished every time
 
     def serial_bridge(self, direction):
         self.get_logger().info(f'Listening: {direction.data}')
@@ -52,12 +53,16 @@ class DirectionToSerial(Node):
                 continue
 
             # Just relay the value, don't interpret it, same philosophy as the
-            # write side. MODE changes rarely, worth logging; DISTANCE streams
-            # every ~100ms and would flood the terminal if logged too.
+            # write side. Republished every time on purpose (self-heals from
+            # a dropped line), but only logged when it actually changes —
+            # otherwise a 100ms heartbeat floods the terminal with repeats.
             if line.startswith('MODE,'):
-                self.get_logger().info(f'Nano says: {line}')
+                mode = line.split(',', 1)[1]
+                if mode != self.last_logged_mode:
+                    self.get_logger().info(f'Nano says: {line}')
+                    self.last_logged_mode = mode
                 msg = String()
-                msg.data = line.split(',', 1)[1]
+                msg.data = mode
                 self.control_mode_publisher.publish(msg)
             elif line.startswith('DISTANCE,'):
                 msg = String()
