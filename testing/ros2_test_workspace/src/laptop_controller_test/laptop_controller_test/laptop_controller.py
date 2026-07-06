@@ -62,9 +62,11 @@ class LaptopController(Node):
         # Movement/speed/claw go through command_switcher, which only forwards
         # them to Direction while we're actually the active mode.
         self.publisher = self.create_publisher(String, 'ManualDirection', 10)
-        # Mode requests go straight onto Direction — they bypass command_switcher
-        # since the Nano needs to see them regardless of whatever mode we're in.
-        self.direction_publisher = self.create_publisher(String, 'Direction', 10)
+        # Mode requests go through command_switcher, not straight to Direction —
+        # it needs to see the request itself so it can stop trusting
+        # AutomaticDirection immediately, rather than waiting on the Nano's
+        # round-trip confirmation over ControlMode.
+        self.mode_request_publisher = self.create_publisher(String, 'ModeRequest', 10)
         # QoS must match the publisher's (best-effort, shallow queue) or the
         # two won't connect at all — a reliable subscriber can't pair with a
         # best-effort publisher in DDS.
@@ -100,7 +102,7 @@ class LaptopController(Node):
     def publish_mode_request(self, mode_command):
         msg = String()
         msg.data = mode_command
-        self.direction_publisher.publish(msg)
+        self.mode_request_publisher.publish(msg)
         self.get_logger().info(f'Requesting: {mode_command}')
 
     def publish_view_mode(self, mode):
