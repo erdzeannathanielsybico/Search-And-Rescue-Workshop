@@ -73,10 +73,18 @@ class LaptopController(Node):
         self.camera_subscription = self.create_subscription(
             CompressedImage, 'CameraFeed', self.on_camera_frame, qos_profile_sensor_data)
         self.view_mode_publisher = self.create_publisher(String, 'CameraViewMode', 10)
+        self.control_mode_subscription = self.create_subscription(
+            String, 'ControlMode', self.on_control_mode, 10)
+        # Best-effort, matches how UltrasonicData is published — same
+        # reasoning as CameraFeed, only the latest reading ever matters.
+        self.ultrasonic_subscription = self.create_subscription(
+            String, 'UltrasonicData', self.on_ultrasonic_data, qos_profile_sensor_data)
         self.current_key = None  # which arrow key (if any) is currently held down
         self.last_command = 'STOP'
         self.last_view_mode = 'RAW'  # matches camera_feed_publisher's own default
         self.latest_frame_surface = None  # None until the first camera frame arrives
+        self.current_mode = 'MANUAL'  # mirrors ControlMode; a guess until the Nano actually confirms
+        self.latest_distance_cm = None  # None until UltrasonicData arrives
 
     def on_camera_frame(self, msg):
         # msg.data is already JPEG-encoded bytes — decode back into a BGR image
@@ -89,6 +97,12 @@ class LaptopController(Node):
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, _ = frame.shape
         self.latest_frame_surface = pygame.image.frombuffer(frame.tobytes(), (width, height), 'RGB')
+
+    def on_control_mode(self, msg):
+        self.current_mode = msg.data
+
+    def on_ultrasonic_data(self, msg):
+        self.latest_distance_cm = msg.data
 
     def publish_command(self, command):
         if command == self.last_command:
@@ -119,6 +133,9 @@ class LaptopController(Node):
         screen = pygame.display.set_mode(WINDOW_SIZE)
         pygame.display.set_caption('Robot Controller')
         clock = pygame.time.Clock()
+        # Bottom-left, so it never overlaps camera_feed_publisher's own
+        # top-left detection label when the view mode is BOX.
+        hud_font = pygame.font.SysFont(None, 36)
 
         self.get_logger().info(
             'Arrow keys drive, 1-4 set speed, Q/W open/close claw, 9/0 raw/box view, '
@@ -154,6 +171,11 @@ class LaptopController(Node):
                 screen.blit(self.latest_frame_surface, (0, 0))
             else:
                 screen.fill((30, 30, 30))  # placeholder until the first frame arrives
+
+            distance_text = f'{self.latest_distance_cm}cm' if self.latest_distance_cm is not None else '--'
+            hud_surface = hud_font.render(f'{self.current_mode}  |  {distance_text}', True, (0, 255, 0))
+            screen.blit(hud_surface, (20, WINDOW_SIZE[1] - 50))
+
             pygame.display.flip()
             clock.tick(30)  # 30 fps cap — matches a typical webcam rate
 

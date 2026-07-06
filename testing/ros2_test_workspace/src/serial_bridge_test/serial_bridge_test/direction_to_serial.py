@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from rclpy.qos import qos_profile_sensor_data
 import serial   # pyserial — talks to the Arduino Nano over the USB serial connection
 
 
@@ -24,9 +25,13 @@ class DirectionToSerial(Node):
 
         self.subscription = self.create_subscription(String, 'Direction', self.serial_bridge, 10)
         self.control_mode_publisher = self.create_publisher(String, 'ControlMode', 10)
+        # Best-effort, like CameraFeed/TargetDetails — the Nano streams this
+        # every ~100ms regardless of whether anything's listening, so a
+        # dropped reading isn't worth queuing/retrying, only the latest matters.
+        self.ultrasonic_publisher = self.create_publisher(String, 'UltrasonicData', qos_profile_sensor_data)
         # rclpy subscriptions only fire on incoming ROS messages, not on serial
         # activity — poll for lines the Nano sends on its own (e.g. "MODE,AUTO").
-        self.read_timer = self.create_timer(0.05, self.read_from_nano)
+        self.read_timer = self.create_timer(0.02, self.read_from_nano)
 
     def serial_bridge(self, direction):
         self.get_logger().info(f'Listening: {direction.data}')
@@ -38,20 +43,26 @@ class DirectionToSerial(Node):
         self.serial_conn.write((direction.data + '\n').encode('utf-8'))
 
     def read_from_nano(self):
-        if self.serial_conn.in_waiting == 0:
-            return
+        # Drain everything currently buffered, not just one line — the Nano
+        # now streams MODE+DISTANCE continuously, so a fixed one-line-per-tick
+        # read would let a backlog build up if this timer ever falls behind.
+        while self.serial_conn.in_waiting > 0:
+            line = self.serial_conn.readline().decode('utf-8', errors='replace').strip()
+            if not line:
+                continue
 
-        line = self.serial_conn.readline().decode('utf-8', errors='replace').strip()
-        if not line:
-            return
-        self.get_logger().info(f'Nano says: {line}')
-
-        # Only mode reports exist so far ("MODE,AUTO" / "MODE,MANUAL") — just
-        # relay the value, don't interpret it, same philosophy as the write side.
-        if line.startswith('MODE,'):
-            msg = String()
-            msg.data = line.split(',', 1)[1]
-            self.control_mode_publisher.publish(msg)
+            # Just relay the value, don't interpret it, same philosophy as the
+            # write side. MODE changes rarely, worth logging; DISTANCE streams
+            # every ~100ms and would flood the terminal if logged too.
+            if line.startswith('MODE,'):
+                self.get_logger().info(f'Nano says: {line}')
+                msg = String()
+                msg.data = line.split(',', 1)[1]
+                self.control_mode_publisher.publish(msg)
+            elif line.startswith('DISTANCE,'):
+                msg = String()
+                msg.data = line.split(',', 1)[1]
+                self.ultrasonic_publisher.publish(msg)
 
     def destroy_node(self):
         # make sure the serial port is released cleanly on shutdown (Ctrl+C)

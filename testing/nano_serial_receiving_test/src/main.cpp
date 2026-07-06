@@ -21,11 +21,28 @@
 #define CLAW_OPEN_ANGLE  10
 #define CLAW_CLOSE_ANGLE 60
 
+#define ULTRASONIC_TRIG_PIN 2
+#define ULTRASONIC_ECHO_PIN 13
+
 Servo claw;
 
 // Reported back to the RPi over serial whenever it changes — the RPi never
 // assumes a mode switch took effect just because it asked, it waits for this.
 String currentMode = "MANUAL";
+
+// MODE + DISTANCE are both reported on this cadence, not just on change —
+// periodic beats event-only here, so a single dropped/garbled serial line
+// self-heals on the next tick instead of leaving the RPi stuck on stale
+// data. 100ms also respects the HC-SR04's own limit: pinging it faster than
+// ~60ms apart lets the previous echo bleed into the next reading.
+const unsigned long REPORT_INTERVAL_MS = 100;
+unsigned long lastReportTime = 0;
+
+// pulseIn() blocks until the echo returns or this timeout expires — kept
+// tight (~1m round trip) so a sensor with nothing in range can't stall
+// command responsiveness for long. Anything past ~1m doesn't matter for
+// "close enough to grab" anyway.
+const unsigned long ULTRASONIC_ECHO_TIMEOUT_US = 6000;
 
 // Not wired up yet, reserved here so the pin map matches Hashim's PCB doc:
 // D10 (PWM) - Servo 2 (spare)
@@ -35,10 +52,22 @@ String currentMode = "MANUAL";
 //                            a tone is playing. Avoid tone() while driving,
 //                            or drive the buzzer with plain digitalWrite().
 // D11       - LED strip data
-// D2        - HC-SR04 Trig
-// D13       - HC-SR04 Echo
 // A4/A5     - I2C SDA/SCL (MPU6050)
 // A6/A7     - Battery sense (Cell 1 / full pack, via divider)
+
+// Returns distance in cm, or -1 if nothing echoed back within the timeout
+// (out of range / no obstacle).
+long readDistanceCm() {
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ULTRASONIC_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+
+  long duration = pulseIn(ULTRASONIC_ECHO_PIN, HIGH, ULTRASONIC_ECHO_TIMEOUT_US);
+  if (duration == 0) return -1;
+  return duration / 58;  // standard HC-SR04 conversion (speed of sound, round trip)
+}
 
 void forward() {
   digitalWrite(LEFT_DIR_A, HIGH);  digitalWrite(LEFT_DIR_B, LOW);
@@ -85,6 +114,8 @@ void setup() {
   pinMode(LEFT_DIR_A, OUTPUT);  pinMode(LEFT_DIR_B, OUTPUT);
   pinMode(RIGHT_DIR_A, OUTPUT); pinMode(RIGHT_DIR_B, OUTPUT);
   pinMode(LEFT_SPEED, OUTPUT);  pinMode(RIGHT_SPEED, OUTPUT);
+  pinMode(ULTRASONIC_TRIG_PIN, OUTPUT);
+  pinMode(ULTRASONIC_ECHO_PIN, INPUT);
 
   claw.attach(CLAW_SERVO_PIN);
   claw.write(CLAW_OPEN_ANGLE); // NEVER FORGET OR ELSE SERVO WILL BREAK
@@ -148,5 +179,12 @@ void loop() {
       Serial.println("Unknown command: " + line);
       stopMotors();
     }
+  }
+
+  unsigned long now = millis();
+  if (now - lastReportTime >= REPORT_INTERVAL_MS) {
+    lastReportTime = now;
+    Serial.println("MODE," + currentMode);
+    Serial.println("DISTANCE," + String(readDistanceCm()));
   }
 }
