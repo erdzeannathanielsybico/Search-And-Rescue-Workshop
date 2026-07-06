@@ -23,6 +23,10 @@
 
 Servo claw;
 
+// Reported back to the RPi over serial whenever it changes — the RPi never
+// assumes a mode switch took effect just because it asked, it waits for this.
+String currentMode = "MANUAL";
+
 // Not wired up yet, reserved here so the pin map matches Hashim's PCB doc:
 // D10 (PWM) - Servo 2 (spare)
 // D6  (PWM) - Buzzer      -- shares Timer2 with LEFT_SPEED (D3). If the
@@ -124,6 +128,15 @@ void loop() {
         claw.write(CLAW_OPEN_ANGLE);
       } else if (argument == "CLOSE") {
         claw.write(CLAW_CLOSE_ANGLE);
+      }
+    } else if (keyword == "MODE") {
+      // Just a request — accept it and echo back so the RPi knows it
+      // actually took effect. The ultrasonic-triggered auto-revert (once
+      // the sensor's wired in) will echo this same way, unprompted.
+      String argument = line.substring(commaIndex + 1);
+      if (argument == "AUTO" || argument == "MANUAL") {
+        currentMode = argument;
+        Serial.println("MODE," + currentMode);
       }
     } else {
       Serial.println("Unknown command: " + line);

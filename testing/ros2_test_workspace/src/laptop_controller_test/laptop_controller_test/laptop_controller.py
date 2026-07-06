@@ -1,3 +1,13 @@
+"""
+Keyboard controls:
+  Arrow keys    - drive (held = moving, released = stop)
+  1 / 2 / 3 / 4 - set speed, low to high
+  Q / W         - claw open / close
+  9 / 0         - camera view: raw / box (detection overlay)
+  O / P         - request automatic / manual mode
+Click the window first so it has keyboard focus. Close it to quit.
+"""
+
 import cv2
 import numpy as np
 import pygame
@@ -35,6 +45,13 @@ KEY_TO_VIEW_MODE = {
     pygame.K_0: 'BOX',
 }
 
+# A request, not a command — the Nano decides whether/when it actually
+# switches and reports back over serial; this doesn't assume it took effect.
+KEY_TO_MODE_REQUEST = {
+    pygame.K_o: 'MODE,AUTO',
+    pygame.K_p: 'MODE,MANUAL',
+}
+
 # Matches the camera feed's requested resolution (camera_feed_publisher.py)
 WINDOW_SIZE = (1280, 720)
 
@@ -42,7 +59,12 @@ WINDOW_SIZE = (1280, 720)
 class LaptopController(Node):
     def __init__(self):
         super().__init__('laptop_controller')
-        self.publisher = self.create_publisher(String, 'Direction', 10)
+        # Movement/speed/claw go through command_switcher, which only forwards
+        # them to Direction while we're actually the active mode.
+        self.publisher = self.create_publisher(String, 'ManualDirection', 10)
+        # Mode requests go straight onto Direction — they bypass command_switcher
+        # since the Nano needs to see them regardless of whatever mode we're in.
+        self.direction_publisher = self.create_publisher(String, 'Direction', 10)
         # QoS must match the publisher's (best-effort, shallow queue) or the
         # two won't connect at all — a reliable subscriber can't pair with a
         # best-effort publisher in DDS.
@@ -75,6 +97,12 @@ class LaptopController(Node):
         self.publisher.publish(msg)
         self.get_logger().info(f'Publishing: {command}')
 
+    def publish_mode_request(self, mode_command):
+        msg = String()
+        msg.data = mode_command
+        self.direction_publisher.publish(msg)
+        self.get_logger().info(f'Requesting: {mode_command}')
+
     def publish_view_mode(self, mode):
         if mode == self.last_view_mode:
             return
@@ -91,8 +119,8 @@ class LaptopController(Node):
         clock = pygame.time.Clock()
 
         self.get_logger().info(
-            'Arrow keys drive, 1-4 set speed, Q/W open/close claw, 9/0 raw/box view. '
-            'Click the window first. Close it to quit.')
+            'Arrow keys drive, 1-4 set speed, Q/W open/close claw, 9/0 raw/box view, '
+            'O/P automatic/manual mode. Click the window first. Close it to quit.')
 
         running = True
         while running and rclpy.ok():
@@ -115,6 +143,8 @@ class LaptopController(Node):
                     self.publish_command(KEY_TO_CLAW[event.key])
                 elif event.type == pygame.KEYDOWN and event.key in KEY_TO_VIEW_MODE:
                     self.publish_view_mode(KEY_TO_VIEW_MODE[event.key])
+                elif event.type == pygame.KEYDOWN and event.key in KEY_TO_MODE_REQUEST:
+                    self.publish_mode_request(KEY_TO_MODE_REQUEST[event.key])
 
             rclpy.spin_once(self, timeout_sec=0)
 
