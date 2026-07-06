@@ -184,7 +184,19 @@ void loop() {
   unsigned long now = millis();
   if (now - lastReportTime >= REPORT_INTERVAL_MS) {
     lastReportTime = now;
+    long distanceCm = readDistanceCm();
+
+    // Final authority: grab and revert the instant the target's close
+    // enough, regardless of whatever commands are still arriving from the
+    // RPi — this is the safety backstop the automatic-tracking design
+    // depends on. distanceCm == -1 means no echo (out of range), not close.
+    if (currentMode == "AUTO" && distanceCm > 0 && distanceCm < 10) {
+      claw.write(CLAW_CLOSE_ANGLE);
+      stopMotors();
+      currentMode = "MANUAL";
+    }
+
     Serial.println("MODE," + currentMode);
-    Serial.println("DISTANCE," + String(readDistanceCm()));
+    Serial.println("DISTANCE," + String(distanceCm));
   }
 }
