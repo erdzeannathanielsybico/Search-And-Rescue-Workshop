@@ -15,6 +15,79 @@ The adjusted 8-day plan (~90–120 productive min/day):
 
 Whichever tier is used, options 1 and 2 both still need the laptop-side ROS 2 setup in `ros2_journey.md` Journey 2 — WSL2, mirrored networking mode, matching `ROS_DOMAIN_ID`, the two Windows Firewall rules (option 3 runs everything on the RPi itself, no laptop ROS 2 install needed at all). That setup has several non-obvious failure points (a symlink/Developer Mode gotcha, a stale-daemon issue after network changes) that took real troubleshooting even one-on-one — students should never be debugging this live. Set up and verify every team's laptop in advance.
 
+### Boot automation — RPi should need zero commands after power-on
+
+For competition/demo day, nobody should be typing anything after flipping the power switch — no login, no manually running each node in its own terminal. Three independent pieces; combine all three for a genuinely hands-off boot. (Placeholders below like `<pkg1>`, `<your-service-name>` are illustrative — substitute this project's actual package/node names and whatever absolute paths apply on the machine being set up; none of this is pinned to one specific file layout.)
+
+**1. Skip the login screen (autologin).**
+- Raspberry Pi OS: `sudo raspi-config` → System Options → Boot / Auto Login → Desktop Autologin.
+- Ubuntu Desktop (what this RPi actually runs — `raspi-config` doesn't exist on Ubuntu): edit `/etc/gdm3/custom.conf`, and under `[daemon]` add:
+  ```ini
+  AutomaticLoginEnable = true
+  AutomaticLogin = <your-username>
+  ```
+  This only skips the login screen — it does **not** remove the account password, so SSH and `sudo` still work normally.
+
+**2. Make the RPi always boot as its own WiFi hotspot** (Networking tier 1 above). To guarantee it's *only* ever the hotspot — no dependency on a venue/home network being in range — disable autoconnect on every other saved WiFi profile and leave it enabled only on the hotspot connection:
+```bash
+nmcli connection show                                                  # list all saved profiles
+nmcli connection modify <other-wifi-name> connection.autoconnect no    # repeat per other profile
+nmcli connection modify <hotspot-name> connection.autoconnect yes
+```
+
+**3. Auto-launch the ROS 2 nodes with systemd** — not a desktop autostart entry, since that depends on a graphical session being active. Two pieces:
+
+**a. A launch file** bundling every node that needs to run on the RPi, in its own small dedicated package rather than stuffed inside one of the node packages (it doesn't belong to any single one of them). Following this repo's `<concept>_test` naming convention, e.g. `bringup_test`:
+```python
+# <bringup_package>/launch/<name>.launch.py
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    return LaunchDescription([
+        Node(package='<pkg1>', executable='<node1>'),
+        Node(package='<pkg2>', executable='<node2>'),
+        # one Node(...) per node that needs to start on the RPi
+    ])
+```
+Register it in that package's `setup.py` (add `import os` and `from glob import glob` at the top, then a `data_files` entry):
+```python
+data_files=[
+    ...,
+    (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+],
+```
+Test it standalone before wiring up systemd: `ros2 launch <bringup_package> <name>.launch.py`.
+
+**b. A systemd service** reproducing "source ROS 2, source the workspace, run the launch file" with no terminal and no interactive shell involved:
+```ini
+# /etc/systemd/system/<your-service-name>.service
+[Unit]
+Description=<description>
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<your-username>
+Environment=ROS_DOMAIN_ID=<your-domain-id>
+ExecStartPre=/bin/bash -c 'until ip -4 addr show <wifi-interface> | grep -q "inet <hotspot-ip>"; do sleep 1; done'
+ExecStart=/bin/bash -c "source /opt/ros/<distro>/setup.bash && source <absolute-path-to-workspace>/install/setup.bash && ros2 launch <bringup_package> <name>.launch.py"
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now <your-service-name>.service
+journalctl -u <your-service-name> -f     # watch it live
+```
+Manage it afterward with `sudo systemctl stop|start|restart <your-service-name>.service` — there's no terminal window to `Ctrl+C` anymore, that's the point of moving it to systemd.
+
+**Before assuming this is done**, see "ROS 2 nodes launched via systemd are invisible..." in Known Issues & Fixes below — a systemd-launched node is invisible to everything else, even another process on the same machine, unless `ROS_DOMAIN_ID` is set directly on the service. It does not inherit `~/.bashrc`.
+
 ### Firmware
 Test the full firmware (drive + speed + claw + ultrasonic) on the actual **Arduino Nano** each team will use in competition, not just a dev unit — the Nano is the primary, actively-developed target now (see Confirmed Hardware & Software below), and its limited PWM-capable pins mean a servo/motor pin conflict can be specific to which physical pins a given board actually got wired to.
 
@@ -135,6 +208,21 @@ See `camera_feed_test/camera_feed_publisher.py`.
 **Investigation:** `echo $ROS_AUTOMATIC_DISCOVERY_RANGE` kept printing `SUBNET` in supposedly-fresh terminals, even after `unset`, a full WSL restart, and a full Windows restart. Searched for where it was set: `.bashrc`, `.profile`, `.bash_profile`, `/etc/environment`, `/etc/profile`, `/etc/profile.d/*`, a full recursive grep of the home directory and `/etc`, `systemctl show-environment`, Windows User/Machine environment variables, and Windows Terminal's own `settings.json`. It wasn't in any of them. The RPi — a completely separate machine — showed the same `SUBNET` value independently, which rules out anything Windows/WSL-specific and suggests it might just be ROS 2 Jazzy's own default, but this was never actually confirmed.
 
 **Fix:** None confirmed. Whatever actually resolved it coincided with a full restart of both machines plus reconfirming plain `ping` connectivity before retrying ROS 2 — after that, discovery worked reliably. Whether the env var was ever the real cause, or just a red herring that happened to clear alongside an unrelated fix, is unknown. If this recurs: check `ping` between the two machines *first*, before chasing this variable again.
+
+### ROS 2 nodes launched via systemd are invisible to everything else, even locally (`ROS_DOMAIN_ID` not inherited)
+**Symptom:** Nodes started manually (`ros2 launch ...` typed in a terminal) are discovered fine — from the laptop, from a second terminal on the same RPi, everywhere. The *exact same* launch file, run automatically via a systemd service instead, is invisible everywhere — including `ros2 node list` run locally on the RPi itself, right next to the running service. Changing the network (WiFi vs. hotspot, timing, firewall) makes no difference either way, which is what makes this one easy to misdiagnose as a networking problem first.
+
+**Cause:** `ROS_DOMAIN_ID` (see `ros2_journey.md` step 8b) was only ever set via `export ROS_DOMAIN_ID=<n>` in `~/.bashrc`. `.bashrc` only loads in interactive shells — a systemd service's process never reads it, so it silently defaults to domain `0` instead of whatever the rest of the fleet uses. DDS domains are fully isolated from each other, so a domain-`0` node is invisible to anything expecting the real domain, even on the same machine over loopback — this has nothing to do with the network layer at all.
+
+**Fix:** Set the domain ID directly on the systemd unit instead of relying on `.bashrc` being sourced:
+```ini
+[Service]
+Environment=ROS_DOMAIN_ID=<n>
+```
+To verify what a running service's process actually has (don't assume `.bashrc` exports apply just because they work in every terminal you've tested):
+```bash
+cat /proc/<pid>/environ | tr '\0' '\n' | grep ROS_DOMAIN_ID
+```
 
 ---
 
