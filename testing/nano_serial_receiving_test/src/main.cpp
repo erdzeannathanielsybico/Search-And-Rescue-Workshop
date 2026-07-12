@@ -86,12 +86,12 @@ void stopMotors() {
 
 // Assumes left = Nano's "left" pins above, right = Nano's "right" pins above.
 // If the robot turns the wrong way on first test, swap which side reverses.
-void turnLeft() {
+void turnRight() {
   digitalWrite(LEFT_DIR_A, LOW);   digitalWrite(LEFT_DIR_B, HIGH);
   digitalWrite(RIGHT_DIR_A, HIGH); digitalWrite(RIGHT_DIR_B, LOW);
 }
 
-void turnRight() {
+void turnLeft() {
   digitalWrite(LEFT_DIR_A, HIGH); digitalWrite(LEFT_DIR_B, LOW);
   digitalWrite(RIGHT_DIR_A, LOW); digitalWrite(RIGHT_DIR_B, HIGH);
 }
