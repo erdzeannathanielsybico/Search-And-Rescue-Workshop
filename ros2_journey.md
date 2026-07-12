@@ -1,6 +1,6 @@
 # ROS 2 Journey
 
-Two separate journeys to the same destination — "a node is running and talking on a topic" — on two different machines. They're kept as two independent sets of steps rather than merged, since the RPi runs Ubuntu natively and the laptop runs it through WSL2, and the setup steps genuinely differ.
+Three separate journeys to the same destination — "a node is running and talking on a topic" — on three different machines. They're kept as independent sets of steps rather than merged, since the RPi runs Ubuntu natively, the Windows laptop runs it through WSL2, and an Apple Silicon Mac runs it through Docker — the setup steps genuinely differ.
 
 ---
 
@@ -252,3 +252,128 @@ Success looks like the laptop printing `I heard: [Hello World: N]` messages comi
 ---
 
 **✅ Confirmed end-to-end, after all 8 steps above:** laptop (`laptop_controller_test`, pygame keypresses) → `Direction` topic over the cross-machine network → RPi (`serial_bridge_test`'s `direction_to_serial`) → serial → ESP32 (`main.cpp`) → motors actually turning. The full two-machine ROS 2 chain works.
+
+---
+
+# Journey 3 — Apple Silicon Mac (M-series, via Docker)
+
+Same destination again, but macOS is **Tier 3** for ROS 2 — there are no official binaries, and Jazzy targets Ubuntu 24.04 specifically. Rather than fight a source build, the lowest-friction path is to run the exact same Ubuntu 24.04 + Jazzy environment inside a Docker container. This adds a layer underneath Journey 1, the same way WSL2 does for Journey 2: get a real Ubuntu running first, then Journey 1 applies inside it.
+
+**Two limitations to know up front:**
+- **GUI apps (RViz, rqt) are painful.** They need XQuartz forwarding and run slowly. Foxglove (via `foxglove-bridge`, in a browser) or the project's own pygame/OpenCV windows are better bets — but note those still hit the same X-forwarding wall, so a Mac is best used as a *headless* ROS 2 node, not the machine you drive from.
+- **USB/serial devices do not pass through** to the container at all on macOS — Docker Desktop has no host USB access. Anything touching the Nano over `/dev/ttyUSB*` (the serial bridge) has to run on the RPi, not here.
+
+## 1. The critical gotcha: image architecture (read before pulling anything)
+
+The obvious image, `osrf/ros:jazzy-desktop`, is **amd64-only**. On Apple Silicon, `docker pull`/`docker run` won't error — it silently falls back to x86 emulation via Rosetta, which makes *everything* (builds, node startup, vision) painfully slow. This is the single biggest trap on Mac.
+
+The official `ros` images (e.g. `ros:jazzy-ros-base`) **are multi-arch** and have a native `arm64` variant. The fix is to build a custom image `FROM ros:jazzy-ros-base` and `apt install ros-jazzy-desktop` ourselves — the arm64 Debian packages for the desktop metapackage exist, even though a prebuilt arm64 *desktop image* doesn't.
+
+After building (step 4), always verify:
+```bash
+docker image inspect <img> --format '{{.Architecture}}'
+```
+This **must** print `arm64`. If it prints `amd64`, you're on the emulated path — rebuild from `ros:jazzy-ros-base`, not `osrf/ros:jazzy-desktop`.
+
+## 2. Install Docker Desktop for Mac
+
+Install the **Apple Silicon** build of Docker Desktop (not the Intel one) from https://www.docker.com/products/docker-desktop/. Launch it once and let it finish starting, then confirm the CLI works:
+```bash
+docker version
+```
+
+## 3. Create the workspace on the Mac side
+
+Make the workspace on the host, so git and VS Code operate natively on macOS (the container will mount it in step 5):
+```bash
+mkdir -p ~/ros2_ws/src
+```
+
+## 4. Write the Dockerfile and build a native arm64 desktop image
+
+Create `~/ros2_ws/Dockerfile`:
+```dockerfile
+FROM ros:jazzy-ros-base
+
+# Desktop metapackage + Foxglove bridge + build tooling.
+# The arm64 Debian packages exist even though the prebuilt desktop image doesn't.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-jazzy-desktop \
+        ros-jazzy-foxglove-bridge \
+        python3-colcon-common-extensions \
+        ros-dev-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bake sourcing + domain ID into .bashrc so it survives container recreation.
+# Sourcing the workspace is conditional — it won't exist until the first colcon build.
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc \
+    && echo "[ -f /ros2_ws/install/setup.bash ] && source /ros2_ws/install/setup.bash" >> /root/.bashrc \
+    && echo "export ROS_DOMAIN_ID=42" >> /root/.bashrc
+```
+
+Build it as native arm64, then verify the architecture (step 1):
+```bash
+cd ~/ros2_ws
+docker build --platform linux/arm64 -t sar-jazzy .
+docker image inspect sar-jazzy --format '{{.Architecture}}'   # MUST print: arm64
+```
+
+> Match `ROS_DOMAIN_ID=42` to whatever the rest of the fleet uses (see Journey 2, step 8b) — every machine on the same DDS network needs the same number.
+
+## 5. Create the container (once)
+
+Run it **detached** (`-dit`), mounting the host workspace to `/ros2_ws` and naming it `ros2` so it's easy to reopen:
+```bash
+docker run -dit \
+    --name ros2 \
+    -v ~/ros2_ws:/ros2_ws \
+    -w /ros2_ws \
+    sar-jazzy
+```
+This creates the container **once**. `docker run` is not how you open each terminal — that would spawn a *new* container every time. To open additional shells into this *same* running container you use `docker exec` (next step). ROS 2 workflows routinely need several shells at once (a node running in one, `ros2 topic echo` in another), and they must all be in the same container to see each other.
+
+## 6. Add an `rs` alias for opening shells
+
+Add to `~/.zshrc` on the Mac:
+```bash
+alias rs='docker start ros2 >/dev/null && docker exec -it ros2 bash'
+```
+Reload it (`source ~/.zshrc` or open a new terminal). Now every `rs` starts the container if it's stopped, then drops you into a fresh bash shell inside it — run `rs` in as many terminal tabs as you need, all sharing the one container.
+
+## 7. Verify with ROS 2's own demo nodes
+
+Two `rs` shells, same container:
+```bash
+# Terminal 1
+rs
+ros2 run demo_nodes_cpp talker
+
+# Terminal 2
+rs
+ros2 run demo_nodes_py listener
+```
+Success is the listener printing `I heard: [Hello World: N]`. If that works, the environment is good and Journey 1 (steps 3 onward) applies inside the container unchanged.
+
+## 8. Day-to-day workflow
+
+Clone repos into `~/ros2_ws/src` **from the macOS side** so git and VS Code run natively (the mount makes them instantly visible inside the container — same-files-on-disk, like WSL's `/mnt/c`):
+```bash
+# On the Mac (native git / VS Code)
+cd ~/ros2_ws/src
+git clone <repo-url>
+```
+Then, **inside the container** (`rs`), build and run:
+```bash
+cd /ros2_ws
+rosdep install --from-paths src --ignore-src -r -y   # pull package deps
+colcon build --symlink-install                        # --symlink-install: edit Python without rebuilding
+source install/setup.bash                             # every new shell (baked into .bashrc in step 4)
+ros2 run <pkg> <executable>
+ros2 launch <pkg> <launch-file>
+```
+Not sure what an executable is called? List them:
+```bash
+ros2 pkg executables <pkg>
+```
+
+**Recurring dependencies belong in the Dockerfile.** Anything you `apt install` *inside* the running container is lost the moment the container is removed (`docker rm ros2`) — the image is what persists, not the container. If you find yourself reinstalling the same package after a rebuild, add it to the Dockerfile's `apt-get install` line (step 4) and rebuild instead.
