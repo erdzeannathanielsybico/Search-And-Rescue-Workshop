@@ -32,12 +32,14 @@ class AutomaticDirectionController(Node):
     def __init__(self):
         super().__init__('automatic_direction_controller')
         # Matches CameraFeed's QoS — a stale/dropped detection shouldn't be
-        # queued and retried, only the latest one ever matters.
+        # queued and retried, only the latest one ever matters. Only cares
+        # about location, not color — TargetColor exists as its own topic
+        # for the LED strip, which this node has no reason to touch.
         self.subscription = self.create_subscription(
-            String, 'TargetDetails', self.on_target_details, qos_profile_sensor_data)
+            String, 'TargetLocation', self.on_target_location, qos_profile_sensor_data)
         self.publisher = self.create_publisher(String, 'AutomaticDirection', 10)
 
-    def on_target_details(self, msg):
+    def on_target_location(self, msg):
         # No dedupe here on purpose — command_switcher may have been dropping
         # every message while we weren't the active mode, so there's no way
         # to know the Nano actually has our last-sent state. Resend fresh
@@ -46,8 +48,7 @@ class AutomaticDirectionController(Node):
             self.publish('STOP')
             return
 
-        _color, offset_str = msg.data.split(',')
-        offset = float(offset_str)
+        offset = float(msg.data)
         left, right = compute_speeds(offset)
 
         self.publish('FORWARD')

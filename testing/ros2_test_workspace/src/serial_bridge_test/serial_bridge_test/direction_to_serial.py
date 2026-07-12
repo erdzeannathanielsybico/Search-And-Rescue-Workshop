@@ -24,6 +24,11 @@ class DirectionToSerial(Node):
         self.get_logger().info(f'Opened serial port {port} at {baud} baud')
 
         self.subscription = self.create_subscription(String, 'Direction', self.serial_bridge, 10)
+        # Independent of Direction/mode-gating on purpose — the LED is meant
+        # to reflect whatever the camera currently sees regardless of
+        # AUTO/MANUAL, so it can't ride the same command_switcher-gated path.
+        self.target_color_subscription = self.create_subscription(
+            String, 'TargetColor', self.on_target_color, qos_profile_sensor_data)
         self.control_mode_publisher = self.create_publisher(String, 'ControlMode', 10)
         # Best-effort, like CameraFeed/TargetDetails — the Nano streams this
         # every ~100ms regardless of whether anything's listening, so a
@@ -42,6 +47,11 @@ class DirectionToSerial(Node):
         # where one command ends and the next begins, once you write the code
         # to read it there.
         self.serial_conn.write((direction.data + '\n').encode('utf-8'))
+
+    def on_target_color(self, msg):
+        # Not logged like serial_bridge above — this fires up to 30x/second
+        # (once per camera frame), logging every write would flood the console.
+        self.serial_conn.write((f'LED,{msg.data}\n').encode('utf-8'))
 
     def read_from_nano(self):
         # Drain everything currently buffered, not just one line — the Nano

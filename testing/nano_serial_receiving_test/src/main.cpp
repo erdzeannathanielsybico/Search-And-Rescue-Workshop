@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Servo.h>
+#include <Adafruit_NeoPixel.h>
 
 // --- Pin map from Hashim's PCB design ---
 // Each side's two motors are jumpered together on the board (both IN pins
@@ -24,7 +25,11 @@
 #define ULTRASONIC_TRIG_PIN 2
 #define ULTRASONIC_ECHO_PIN 13
 
+#define LED_STRIP_PIN 11  // NeoPixel/WS2812B data line
+#define LED_COUNT 8       // number of LEDs on the strip — adjust to match the actual strip
+
 Servo claw;
+Adafruit_NeoPixel strip(LED_COUNT, LED_STRIP_PIN, NEO_GRB + NEO_KHZ800);
 
 // Reported back to the RPi over serial whenever it changes — the RPi never
 // assumes a mode switch took effect just because it asked, it waits for this.
@@ -51,7 +56,6 @@ const unsigned long ULTRASONIC_ECHO_TIMEOUT_US = 6000;
 //                            transiently disrupt left-side motor PWM while
 //                            a tone is playing. Avoid tone() while driving,
 //                            or drive the buzzer with plain digitalWrite().
-// D11       - LED strip data
 // A4/A5     - I2C SDA/SCL (MPU6050)
 // A6/A7     - Battery sense (Cell 1 / full pack, via divider)
 
@@ -108,6 +112,27 @@ void setSpeed(int leftSpeed, int rightSpeed) {
   analogWrite(RIGHT_SPEED, rightSpeed);
 }
 
+// Whole strip shows one solid color at a time — matches "what color is the
+// camera currently tracking", not a per-pixel effect. Unrecognized names
+// (including "NONE", sent when nothing's detected) fall through to off.
+void setStripColor(String colorName) {
+  uint32_t color;
+  if (colorName == "YELLOW") {
+    color = strip.Color(255, 255, 0);
+  } else if (colorName == "GREEN") {
+    color = strip.Color(0, 255, 0);
+  } else if (colorName == "BLUE") {
+    color = strip.Color(0, 0, 255);
+  } else {
+    color = strip.Color(0, 0, 0);
+  }
+
+  for (int i = 0; i < LED_COUNT; i++) {
+    strip.setPixelColor(i, color);
+  }
+  strip.show();
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -119,6 +144,9 @@ void setup() {
 
   claw.attach(CLAW_SERVO_PIN);
   claw.write(CLAW_OPEN_ANGLE); // NEVER FORGET OR ELSE SERVO WILL BREAK
+
+  strip.begin();
+  strip.show();  // off until the first LED,<color> command arrives
 
   setSpeed(255, 255);  // full speed by default, until a SPEED command says otherwise
   stopMotors();
@@ -160,6 +188,9 @@ void loop() {
       } else if (argument == "CLOSE") {
         claw.write(CLAW_CLOSE_ANGLE);
       }
+    } else if (keyword == "LED") {
+      String colorName = line.substring(commaIndex + 1);
+      setStripColor(colorName);
     } else if (keyword == "MODE") {
       // Just a request — accept it and echo back so the RPi knows it
       // actually took effect. The ultrasonic-triggered auto-revert (once

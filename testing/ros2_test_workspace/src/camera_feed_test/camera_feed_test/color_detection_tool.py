@@ -12,7 +12,7 @@ reads that file via range_for_color() instead of re-tuning from scratch.
 How to use:
   1. Run the script. Three windows open: Camera (live feed), Mask (black/
      white threshold preview), and HSV Tuning (six sliders).
-  2. Press 1 / 2 / 3 to load a starting point for RED / GREEN / BLUE onto
+  2. Press 1 / 2 / 3 to load a starting point for YELLOW / GREEN / BLUE onto
      the sliders (the last saved range for that color if there is one,
      otherwise a rough default).
   3. Adjust the sliders while watching the Mask window — the goal is white
@@ -41,16 +41,16 @@ MIN_TARGET_AREA = 500
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'color_ranges.json')
 
 # Rough starting points, used only the first time a color is picked (before
-# it's been tuned and saved). Red is deliberately narrow (0-10) rather than
-# the full 0-179 wheel — red also wraps around to 170-179, which a single
-# range like this can't cover; nudge H Min/Max toward that side instead if
-# your red object needs it.
+# it's been tuned and saved). Yellow sits at OpenCV H~20-35 (pure yellow is
+# ~30) — unlike red, it doesn't wrap around the hue wheel, but it does sit
+# close to skin/wood tones indoors, so keep S Min/V Min raised while tuning
+# rather than widening H too far to compensate.
 DEFAULT_PRESETS = {
-    'RED': ((0, 120, 70), (10, 255, 255)),
+    'YELLOW': ((20, 100, 100), (35, 255, 255)),
     'GREEN': ((35, 80, 50), (85, 255, 255)),
     'BLUE': ((90, 80, 50), (130, 255, 255)),
 }
-KEY_TO_COLOR = {ord('1'): 'RED', ord('2'): 'GREEN', ord('3'): 'BLUE'}
+KEY_TO_COLOR = {ord('1'): 'YELLOW', ord('2'): 'GREEN', ord('3'): 'BLUE'}
 
 
 def _on_trackbar_change(_value):
@@ -133,10 +133,10 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     create_trackbars()
-    current_color = 'RED'
+    current_color = 'YELLOW'
     set_hsv_range(*range_for_color(current_color))
 
-    print('Press 1/2/3 to load RED/GREEN/BLUE, tune the sliders, then S to save. Q to quit.')
+    print('Press 1/2/3 to load YELLOW/GREEN/BLUE, tune the sliders, then S to save. Q to quit.')
 
     while True:
         ret, frame = cap.read()

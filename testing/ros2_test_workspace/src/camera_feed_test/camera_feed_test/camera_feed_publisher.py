@@ -11,7 +11,7 @@ from camera_feed_test import color_detection_tool
 # Checked in this order — first color whose saved range finds a target
 # wins. Sequential, not simultaneous, so two differently-colored objects
 # in frame at once don't produce two competing detections.
-COLOR_PRIORITY = ['RED', 'GREEN', 'BLUE']
+COLOR_PRIORITY = ['YELLOW', 'GREEN', 'BLUE']
 
 
 class CameraFeedPublisher(Node):
@@ -49,10 +49,15 @@ class CameraFeedPublisher(Node):
         self.publisher = self.create_publisher(CompressedImage, 'CameraFeed', qos_profile_sensor_data)
 
         # Detection runs every frame regardless of view mode — automatic
-        # driving needs it even while the HUD is showing RAW. TargetDetails
-        # uses the same best-effort QoS as CameraFeed: a stale detection
-        # shouldn't be queued/retried, only the latest one ever matters.
-        self.target_details_publisher = self.create_publisher(String, 'TargetDetails', qos_profile_sensor_data)
+        # driving needs it even while the HUD is showing RAW, and the LED
+        # strip needs the color even while driving manually. Two separate
+        # topics on purpose, not one combined string: TargetColor is mode-
+        # independent (LED is pure "what do I see"), TargetLocation only
+        # matters for steering. Same best-effort QoS as CameraFeed either
+        # way — a stale detection shouldn't be queued/retried, only the
+        # latest one ever matters.
+        self.target_color_publisher = self.create_publisher(String, 'TargetColor', qos_profile_sensor_data)
+        self.target_location_publisher = self.create_publisher(String, 'TargetLocation', qos_profile_sensor_data)
 
         # RAW = publish frames untouched (fastest). BOX = also draw a box +
         # position around the detected target. Only ever publishing one —
@@ -79,7 +84,12 @@ class CameraFeedPublisher(Node):
                 return candidate, bbox
         return None, None
 
-    def publish_target_details(self, frame_width, color_name, bbox):
+    def publish_target_color(self, color_name):
+        msg = String()
+        msg.data = color_name if color_name is not None else 'NONE'
+        self.target_color_publisher.publish(msg)
+
+    def publish_target_location(self, frame_width, bbox):
         if bbox is None:
             data = 'NONE'
         else:
@@ -88,11 +98,11 @@ class CameraFeedPublisher(Node):
             # -1.0 (fully left) .. 0.0 (centered) .. 1.0 (fully right) —
             # matches the convention automatic_direction_controller expects.
             offset = (cx - frame_width / 2) / (frame_width / 2)
-            data = f'{color_name},{offset:.2f}'
+            data = f'{offset:.2f}'
 
         msg = String()
         msg.data = data
-        self.target_details_publisher.publish(msg)
+        self.target_location_publisher.publish(msg)
 
     def draw_target_box(self, frame, color_name, bbox):
         frame_width = frame.shape[1]
@@ -120,7 +130,8 @@ class CameraFeedPublisher(Node):
             return
 
         color_name, bbox = self.detect_target(frame)
-        self.publish_target_details(frame.shape[1], color_name, bbox)
+        self.publish_target_color(color_name)
+        self.publish_target_location(frame.shape[1], bbox)
 
         if self.view_mode == 'BOX':
             frame = self.draw_target_box(frame, color_name, bbox)
