@@ -3,7 +3,7 @@
 #define ECHO_PIN 13
 #define TRIG_PIN 2
 
-long time_now = 0;
+unsigned long time_now = 0;
 long last_report_time = 0;
 long interval = 100;
 
