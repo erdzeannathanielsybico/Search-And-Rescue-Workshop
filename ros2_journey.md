@@ -134,45 +134,68 @@ The same destination, but the laptop is Windows, and ROS 2 doesn't run natively 
 
 ## Quick copy-paste install (fleet provisioning)
 
-Steps 1–4 below, frozen into one paste-and-go script — for setting up a batch of new laptops fast rather than reading the narrative version. Assumes **Windows 11**. Safe to run even if WSL/Ubuntu is already partially installed — `wsl --install` just confirms it's already there and does nothing destructive.
+Steps 1–4 below, broken into individual copy-paste steps — for setting up a batch of new laptops fast rather than reading the narrative version. Assumes **Windows 11**. Safe to run even if WSL/Ubuntu is already partially installed — `wsl --install` just confirms it's already there and does nothing destructive.
+
+Run each block below **one at a time**, waiting for it to finish before pasting the next — especially the update/upgrade and desktop-install steps, which pull hundreds of MB and look "stuck" (rather than just slow) if bundled together with everything else in one paste.
 
 **Phase 1 — PowerShell (as Administrator):**
 ```powershell
 wsl --install -d Ubuntu-24.04
 ```
-Reboot if prompted (first-time WSL enable only), then launch **Ubuntu-24.04** from the Start menu — it'll prompt for a new Unix username and password. Type anything to get through it; it gets overwritten in the next step. Use the **same username on every laptop** (e.g. `ros`) so the command below is identical copy-paste across all 9, no per-machine substitution.
-
-**Phase 1b — make the password match the username:**
-
-School-laptop admin accounts still make WSL's own `sudo` prompt for *its* Linux password, separate from Windows. Rather than track 9 different passwords, reset each one to equal its username. This runs as root, so it doesn't need the password just typed above:
-```powershell
-wsl -d Ubuntu-24.04 -u root -- bash -c "echo 'ros:ros' | chpasswd"
-```
-(If a different username was used instead of `ros`, replace both occurrences.) From here, every `sudo` prompt in Phase 2 takes that same username as the password.
+Reboot if prompted (first-time WSL enable only), then launch **Ubuntu-24.04** from the Start menu — it'll prompt for a new Unix username and password. Set the **same username and password on every laptop** (e.g. `ros`/`ros`) directly at this prompt, so every `sudo` prompt in Phase 2 takes the same password and the commands below are identical copy-paste across all 9, no per-machine substitution or password-reset step needed afterward.
 
 **Phase 2 — inside the Ubuntu (WSL) terminal:**
+
+**2a. Locale — check first, only fix if needed:**
 ```bash
-locale  # check for UTF-8 — if it's not there, run these 4 lines first
+locale
+```
+If `en_US.UTF-8` isn't in the output:
+```bash
 sudo apt update && sudo apt install locales -y
-sudo locale-gen en_US en_US.UTF-8
 sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 export LANG=en_US.UTF-8
+```
+(`locale-gen en_US en_US.UTF-8` is often listed as part of this step, but wasn't needed on this laptop — `update-locale` alone fixed it and everything downstream worked fine. Only add it back in if `locale` still doesn't show UTF-8 after the above.)
 
+**2b. Enable the `universe` repo:**
+```bash
 sudo apt install software-properties-common -y
 sudo add-apt-repository universe -y
+```
 
+**2c. Add the ROS 2 apt repository.** This originally used the `ros2-apt-source_*.deb` package method from the official docs, but that consistently left `ros-jazzy-desktop` unable to be located in step 2e (apt couldn't see the package at all) — switching to the older GPG-key + `sources.list.d` method fixed it:
+```bash
 sudo apt update && sudo apt install curl -y
-export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}')
-curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $VERSION_CODENAME)_all.deb"
-sudo apt install /tmp/ros2-apt-source.deb -y
+sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+```
 
+**2d. Update + upgrade (large download — let it finish before moving on):**
+```bash
 sudo apt update
 sudo apt upgrade -y
+```
 
+**2e. Install the ROS 2 Jazzy desktop package (the other large download):**
+```bash
 sudo apt install ros-jazzy-desktop -y
+```
+
+**2f. Dev tools + colcon:**
+```bash
 sudo apt install ros-dev-tools -y
 sudo apt install python3-colcon-common-extensions -y
+```
 
+**2g. rosdep init/update:**
+```bash
+sudo rosdep init
+rosdep update
+```
+
+**2h. Source ROS 2 and set the domain ID:**
+```bash
 echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc
 source ~/.bashrc
@@ -213,6 +236,8 @@ Should show `Release: 24.04`, `Codename: noble`.
 ## 3. Install ROS 2 Jazzy
 
 Identical to Journey 1, step 2 — same official docs (**https://docs.ros.org/en/jazzy/index.html**), same `ros-jazzy-desktop` package, same `source /opt/ros/jazzy/setup.bash` and `~/.bashrc` line. Nothing about this step is laptop-specific.
+
+If `sudo apt install ros-jazzy-desktop` can't locate the package, the official docs' `ros2-apt-source_*.deb` repo-setup method is the likely cause — see steps 2a–2g in the quick copy-paste script above for the GPG-key + `sources.list.d` method that fixed it here.
 
 ## 4. Install colcon
 
