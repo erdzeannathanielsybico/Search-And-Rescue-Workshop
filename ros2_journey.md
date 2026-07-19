@@ -174,8 +174,10 @@ sudo apt install ros-dev-tools -y
 sudo apt install python3-colcon-common-extensions -y
 
 echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc
 source ~/.bashrc
 ```
+`ROS_DOMAIN_ID=42` matches the RPi (Journey 2, step 8b) so each laptop can see its own RPi's nodes. Safe to reuse `42` on all 9 here specifically because each laptop connects to its *own* RPi's hotspot network — they're physically separate networks, not one shared LAN, so the "different teams need different IDs" crosstalk risk doesn't apply.
 
 **Phase 3 — verify:**
 ```bash
