@@ -8,7 +8,7 @@ class MinimalSubscriber(Node):
     # setup() — runs once, registers the subscription
     def __init__(self):
         super().__init__('minimal_subscriber')                                            # register this node with ROS2 under the name 'minimal_subscriber'
-        self.subscription = self.create_subscription(String, 'topic', self.pub_listener, 10)  # listen on 'topic', call pub_listener when a message arrives, buffer 10
+        self.subscription = self.create_subscription(String, 'test_topic', self.pub_listener, 10)  # listen on 'topic', call pub_listener when a message arrives, buffer 10
 
     # fires automatically when a message arrives on 'topic' — ROS2 passes the message in as msg
     def pub_listener(self, msg):
