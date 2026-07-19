@@ -142,7 +142,7 @@ Run each block below **one at a time**, waiting for it to finish before pasting 
 ```powershell
 wsl --install -d Ubuntu-24.04
 ```
-Reboot if prompted (first-time WSL enable only), then launch **Ubuntu-24.04** from the Start menu — it'll prompt for a new Unix username and password. Set the **same username and password on every laptop** (e.g. `ros`/`ros`) directly at this prompt, so every `sudo` prompt in Phase 2 takes the same password and the commands below are identical copy-paste across all 9, no per-machine substitution or password-reset step needed afterward.
+Reboot if prompted (first-time WSL enable only), then launch **Ubuntu-24.04** from the Start menu — it'll prompt for a new Unix username and password. Set the **same username and password on every laptop** (e.g. `user`/`user`) directly at this prompt, so every `sudo` prompt in Phase 2 takes the same password and the commands below are identical copy-paste across all 9, no per-machine substitution or password-reset step needed afterward. (`user` is what's actually shown at the prompt on the school laptops so far — e.g. `user@HF-LP-4051` — so match that rather than picking a different name.)
 
 **If `sudo` says `Sorry, try again` later on:** Windows admin rights and the WSL Linux user's password are two separate things — being a Windows admin doesn't set or override the Linux password, so a mistyped password at the first-launch prompt (easy to do, since nothing is echoed while typing) leaves `sudo` rejecting every attempt with no indication why. This came up on one of the school laptops. Fix, from PowerShell (doesn't need Administrator):
 ```powershell
@@ -150,7 +150,7 @@ wsl -u root
 ```
 Then, at the `root@...` prompt inside WSL:
 ```bash
-passwd ros   # replace 'ros' with the actual username if different
+passwd user   # replace 'user' with the actual username shown in the prompt if different
 ```
 Type the new password twice (blind, as usual), then `exit` back out and reopen the normal WSL terminal — `sudo` should accept it now.
 
@@ -174,7 +174,13 @@ sudo apt install software-properties-common -y
 sudo add-apt-repository universe -y
 ```
 
-**2c. Add the ROS 2 apt repository.** This originally used the `ros2-apt-source_*.deb` package method from the official docs, but that consistently left `ros-jazzy-desktop` unable to be located in step 2e (apt couldn't see the package at all) — switching to the older GPG-key + `sources.list.d` method fixed it:
+**2c. Add the ROS 2 apt repository.** This originally used the `ros2-apt-source_*.deb` package method from the official docs, but that consistently left `ros-jazzy-desktop` unable to be located in step 2e (apt couldn't see the package at all) — switching to the older GPG-key + `sources.list.d` method fixed it.
+
+**First, prime `sudo` so the block below doesn't stall on a password prompt mid-paste:**
+```bash
+sudo -v
+```
+Run this alone and enter the password when asked. This matters because the block below is the *first* `sudo` call in a fresh terminal on a brand-new laptop — if all three lines get pasted at once, the terminal is still sitting at a blind password prompt when lines 2 and 3 arrive, so their text gets fed into the password field instead of run as commands, and everything comes out garbled (this is exactly what broke one of the school laptops). `sudo -v` alone gets the password prompt out of the way first; `sudo` then stays authenticated for the next few minutes, so the paste below runs straight through.
 ```bash
 sudo apt update && sudo apt install curl -y
 sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
