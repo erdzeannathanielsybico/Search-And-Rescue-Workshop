@@ -86,6 +86,13 @@ journalctl -u <your-service-name> -f     # watch it live
 ```
 Manage it afterward with `sudo systemctl stop|start|restart <your-service-name>.service` — there's no terminal window to `Ctrl+C` anymore, that's the point of moving it to systemd.
 
+On the actual robots, this service is named `sar-bringup.service` (bundles all 4 nodes — `command_switcher`, `automatic_direction_controller`, `direction_to_serial`, `camera_feed_publisher` — via `bringup_test/launch/pi_bringup.launch.py`). To manually restart all 4 nodes at once instead of starting each individually:
+```bash
+sudo systemctl restart sar-bringup.service
+journalctl -u sar-bringup.service -f     # confirm all 4 come back up clean
+```
+**Before restarting, make sure the robot's hotspot is actually on** — see "`systemctl restart` appears to hang forever" below.
+
 **Before assuming this is done**, see "ROS 2 nodes launched via systemd are invisible..." in Known Issues & Fixes below — a systemd-launched node is invisible to everything else, even another process on the same machine, unless `ROS_DOMAIN_ID` is set directly on the service. It does not inherit `~/.bashrc`.
 
 ### Firmware
@@ -223,6 +230,13 @@ To verify what a running service's process actually has (don't assume `.bashrc` 
 ```bash
 cat /proc/<pid>/environ | tr '\0' '\n' | grep ROS_DOMAIN_ID
 ```
+
+### `systemctl restart sar-bringup.service` appears to hang forever
+**Symptom:** `sudo systemctl restart sar-bringup.service` never returns a prompt — looks identical to a true hang. `systemctl status sar-bringup.service` in a second terminal shows `Active: activating (start-pre)`, and the CGroup shows a running process: `/bin/bash -c "until ip -4 addr show wlan0 | grep -q \"inet 10.42.0...`. None of the 4 nodes start (camera included), because the service hasn't reached `ExecStart` at all.
+
+**Cause:** The unit's `ExecStartPre` deliberately blocks startup until the robot's own hotspot is up on `wlan0` (see the systemd unit above) — this stops the nodes from launching before the hotspot exists, which would otherwise leave a laptop with nothing to connect to. If you're troubleshooting over a different WiFi network instead of the robot's hotspot (easy to do without noticing, e.g. mid-conversation with an AI assistant that needs internet), that condition never becomes true and the loop spins forever. Nothing has failed — it's working exactly as designed, just waiting on a precondition that isn't met yet.
+
+**Fix:** Turn the robot's hotspot on (GNOME Wi-Fi settings, or `nmcli connection up <hotspot-connection-name>`). No need to re-run the restart — the `ExecStartPre` loop is already polling every second (`sleep 1`) in the background, so it falls through on its own within a second of the hotspot coming up, and the original stuck terminal returns on its own once `ExecStart` completes.
 
 ---
 
