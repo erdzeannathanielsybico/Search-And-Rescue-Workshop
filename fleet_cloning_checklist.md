@@ -46,6 +46,23 @@ This board runs Ubuntu Desktop, not Raspberry Pi OS, so `raspi-config` isn't ava
 
 7. **Static IP config**, if any is hardcoded in netplan rather than DHCP — check for hardcoded addresses that would collide across clones.
 
+8. **Remote Desktop — xrdp, not GNOME Remote Desktop.** `rpi5_rdp_setup_log.md` (GNOME's built-in Remote Login) is **superseded** — it hit a widely-reported Ubuntu 24.04 bug (connects, but black screen forever). `rpi5_xrdp_setup_guide.md` is the current, confirmed-working setup and takes priority over anything in the old log. Per-clone, this means:
+   - xrdp needs internet to install, and the hotspot provides none — temporarily join a real WiFi network first (from the console, not over SSH, since the interface swap can drop the session).
+   - Fix the clock before `apt update` if it's drifted, or repo fetches fail as "not valid yet":
+     ```bash
+     sudo timedatectl set-ntp true
+     ```
+   - Install xrdp and swap off the broken GNOME service:
+     ```bash
+     sudo apt update
+     sudo apt install xrdp -y
+     sudo systemctl disable --now gnome-remote-desktop.service
+     sudo systemctl enable --now xrdp
+     ```
+   - Switch WiFi back to the robot's own hotspot, then log out on the console (xrdp refuses to open a session for a user already logged in on the physical monitor — the symptom is the RDP window opening then closing within a second or two).
+   - Connect from Windows: join that robot's hotspot, `mstsc` → `10.42.0.1` (NetworkManager's default hotspot IP — same on every clone, no need to look it up per robot) → login with username `nathaniel` and the **Linux account password** (xrdp authenticates against that directly; the old separate GNOME RDP credential pair no longer applies).
+   - **Better than doing this 4–5 times:** install and confirm xrdp on the source Pi once, then re-image the master `.img` from it — every future clone gets xrdp for free instead of repeating this whole dance per unit.
+
 Everything else — ROS2 install, workspace, systemd bringup service, dependencies — carries over exactly as-is, which is the point of cloning.
 
 ## Verification
