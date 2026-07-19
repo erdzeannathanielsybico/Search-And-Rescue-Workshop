@@ -136,7 +136,7 @@ The same destination, but the laptop is Windows, and ROS 2 doesn't run natively 
 
 Steps 1–4 below, broken into individual copy-paste steps — for setting up a batch of new laptops fast rather than reading the narrative version. Assumes **Windows 11**. Safe to run even if WSL/Ubuntu is already partially installed — `wsl --install` just confirms it's already there and does nothing destructive.
 
-Run each block below **one at a time**, waiting for it to finish before pasting the next — especially the update/upgrade and desktop-install steps, which pull hundreds of MB and look "stuck" (rather than just slow) if bundled together with everything else in one paste.
+Run each command below **one at a time, one paste per command** — not one paste per step. Multi-line pastes are unreliable on these laptops: a `sudo` prompt (or anything else that blocks for input) partway through a multi-line paste eats the remaining lines as if they were typed into that prompt instead of run as commands, so later commands in the block silently never execute (confirmed by pressing ↑ afterward and seeing they never landed in history). `sudo -v` priming to pre-authenticate before a multi-line paste was tried and did **not** reliably fix this — one command per paste is the only approach that's actually held up.
 
 **Phase 1 — PowerShell (as Administrator):**
 ```powershell
@@ -160,10 +160,14 @@ Type the new password twice (blind, as usual), then `exit` back out and reopen t
 ```bash
 locale
 ```
-If `en_US.UTF-8` isn't in the output:
+If `en_US.UTF-8` isn't in the output, run each of these as its own paste:
 ```bash
 sudo apt update && sudo apt install locales -y
+```
+```bash
 sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+```
+```bash
 export LANG=en_US.UTF-8
 ```
 (`locale-gen en_US en_US.UTF-8` is often listed as part of this step, but wasn't needed on this laptop — `update-locale` alone fixed it and everything downstream worked fine. Only add it back in if `locale` still doesn't show UTF-8 after the above.)
@@ -171,57 +175,71 @@ export LANG=en_US.UTF-8
 **2b. Enable the `universe` repo:**
 ```bash
 sudo apt install software-properties-common -y
+```
+```bash
 sudo add-apt-repository universe -y
 ```
 
-**2c. Add the ROS 2 apt repository.** This originally used the `ros2-apt-source_*.deb` package method from the official docs, but that consistently left `ros-jazzy-desktop` unable to be located in step 2e (apt couldn't see the package at all) — switching to the older GPG-key + `sources.list.d` method fixed it.
-
-**First, prime `sudo` so the block below doesn't stall on a password prompt mid-paste:**
-```bash
-sudo -v
-```
-Run this alone and enter the password when asked. This matters because the block below is the *first* `sudo` call in a fresh terminal on a brand-new laptop — if all three lines get pasted at once, the terminal is still sitting at a blind password prompt when lines 2 and 3 arrive, so their text gets fed into the password field instead of run as commands, and everything comes out garbled (this is exactly what broke one of the school laptops). `sudo -v` alone gets the password prompt out of the way first; `sudo` then stays authenticated for the next few minutes, so the paste below runs straight through.
+**2c. Add the ROS 2 apt repository.** This originally used the `ros2-apt-source_*.deb` package method from the official docs, but that consistently left `ros-jazzy-desktop` unable to be located in step 2e (apt couldn't see the package at all) — switching to the older GPG-key + `sources.list.d` method fixed it. Run each line below **separately**:
 ```bash
 sudo apt update && sudo apt install curl -y
+```
+```bash
 sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+```
+```bash
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
 ```
 The `-f` on `curl` matters: on one school laptop the URL got typo'd (`rosdistro` → `rodistro`), which 404'd — and *without* `-f`, `curl -sSL` silently saved GitHub's 404 error page into the keyring file instead of failing loudly (it was 14 bytes; a real key is ~1KB+). Everything downstream (`apt update`, `ros-dev-tools`) then failed with no obvious cause, because apt just silently ignored the malformed keyring/repo rather than erroring. With `-f`, a bad URL now makes `curl` itself fail instead of writing garbage.
 
-**Verify before moving on:**
+**Verify before moving on** (run separately):
 ```bash
-ls -la /usr/share/keyrings/ros-archive-keyring.gpg   # should be ~1KB+, not a few bytes
-cat /etc/apt/sources.list.d/ros2.list                # should print the deb [...] packages.ros.org line
+ls -la /usr/share/keyrings/ros-archive-keyring.gpg
 ```
+Should be ~1KB+, not a few bytes.
+```bash
+cat /etc/apt/sources.list.d/ros2.list
+```
+Should print the `deb [...] packages.ros.org` line.
 
-**2d. Update + upgrade (large download — let it finish before moving on):**
+**2d. Update, then upgrade** (large download — let each finish before pasting the next):
 ```bash
 sudo apt update
+```
+In the output, look for a `Hit:` or `Get:` line mentioning `packages.ros.org` — if it's missing, the repo from 2c isn't actually registered (re-check the two files above) and `ros-dev-tools`/`ros-jazzy-desktop` will fail to locate in the next steps.
+```bash
 sudo apt upgrade -y
 ```
-In the `apt update` output, look for a `Hit:` or `Get:` line mentioning `packages.ros.org` — if it's missing, the repo from 2c isn't actually registered (re-check the two files above) and `ros-dev-tools`/`ros-jazzy-desktop` will fail to locate in the next steps.
 
 **2e. Install the ROS 2 Jazzy desktop package (the other large download):**
 ```bash
 sudo apt install ros-jazzy-desktop -y
 ```
 
-**2f. Dev tools + colcon:**
+**2f. Dev tools, then colcon:**
 ```bash
 sudo apt install ros-dev-tools -y
+```
+```bash
 sudo apt install python3-colcon-common-extensions -y
 ```
 
-**2g. rosdep init/update:**
+**2g. rosdep init, then update:**
 ```bash
 sudo rosdep init
+```
+```bash
 rosdep update
 ```
 
-**2h. Source ROS 2 and set the domain ID:**
+**2h. Source ROS 2, set the domain ID, then apply:**
 ```bash
 echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+```
+```bash
 echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc
+```
+```bash
 source ~/.bashrc
 ```
 `ROS_DOMAIN_ID=42` matches the RPi (Journey 2, step 8b) so each laptop can see its own RPi's nodes. Safe to reuse `42` on all 9 here specifically because each laptop connects to its *own* RPi's hotspot network — they're physically separate networks, not one shared LAN, so the "different teams need different IDs" crosstalk risk doesn't apply.
