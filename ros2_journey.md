@@ -144,6 +144,16 @@ wsl --install -d Ubuntu-24.04
 ```
 Reboot if prompted (first-time WSL enable only), then launch **Ubuntu-24.04** from the Start menu — it'll prompt for a new Unix username and password. Set the **same username and password on every laptop** (e.g. `ros`/`ros`) directly at this prompt, so every `sudo` prompt in Phase 2 takes the same password and the commands below are identical copy-paste across all 9, no per-machine substitution or password-reset step needed afterward.
 
+**If `sudo` says `Sorry, try again` later on:** Windows admin rights and the WSL Linux user's password are two separate things — being a Windows admin doesn't set or override the Linux password, so a mistyped password at the first-launch prompt (easy to do, since nothing is echoed while typing) leaves `sudo` rejecting every attempt with no indication why. This came up on one of the school laptops. Fix, from PowerShell (doesn't need Administrator):
+```powershell
+wsl -u root
+```
+Then, at the `root@...` prompt inside WSL:
+```bash
+passwd ros   # replace 'ros' with the actual username if different
+```
+Type the new password twice (blind, as usual), then `exit` back out and reopen the normal WSL terminal — `sudo` should accept it now.
+
 **Phase 2 — inside the Ubuntu (WSL) terminal:**
 
 **2a. Locale — check first, only fix if needed:**
@@ -167,8 +177,15 @@ sudo add-apt-repository universe -y
 **2c. Add the ROS 2 apt repository.** This originally used the `ros2-apt-source_*.deb` package method from the official docs, but that consistently left `ros-jazzy-desktop` unable to be located in step 2e (apt couldn't see the package at all) — switching to the older GPG-key + `sources.list.d` method fixed it:
 ```bash
 sudo apt update && sudo apt install curl -y
-sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+```
+The `-f` on `curl` matters: on one school laptop the URL got typo'd (`rosdistro` → `rodistro`), which 404'd — and *without* `-f`, `curl -sSL` silently saved GitHub's 404 error page into the keyring file instead of failing loudly (it was 14 bytes; a real key is ~1KB+). Everything downstream (`apt update`, `ros-dev-tools`) then failed with no obvious cause, because apt just silently ignored the malformed keyring/repo rather than erroring. With `-f`, a bad URL now makes `curl` itself fail instead of writing garbage.
+
+**Verify before moving on:**
+```bash
+ls -la /usr/share/keyrings/ros-archive-keyring.gpg   # should be ~1KB+, not a few bytes
+cat /etc/apt/sources.list.d/ros2.list                # should print the deb [...] packages.ros.org line
 ```
 
 **2d. Update + upgrade (large download — let it finish before moving on):**
@@ -176,6 +193,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-a
 sudo apt update
 sudo apt upgrade -y
 ```
+In the `apt update` output, look for a `Hit:` or `Get:` line mentioning `packages.ros.org` — if it's missing, the repo from 2c isn't actually registered (re-check the two files above) and `ros-dev-tools`/`ros-jazzy-desktop` will fail to locate in the next steps.
 
 **2e. Install the ROS 2 Jazzy desktop package (the other large download):**
 ```bash
