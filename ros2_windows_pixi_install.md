@@ -15,13 +15,25 @@ cd C:\pixi_ws
 ```
 Keep the path short — Windows has path-length limits.
 
-## Step 2 — Install pixi
+## Step 2 — Install conda-forge
 
-Follow the installer at https://pixi.sh/latest/ (a PowerShell one-liner on their site).
+ROS 2 uses conda-forge as a backend for packages, with pixi as the frontend — conda-forge needs to be installed first.
+
+Go to https://conda-forge.org/download/, download the **Windows** installer, and run it.
+
+> **Note:** the conda-forge installer may trigger Windows Defender to flag it as a threat. This can be safely ignored — click "More info" then "Run anyway."
+
+## Step 3 — Install pixi
+
+In PowerShell, as of 20 July 2026 the install command is:
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm -useb https://pixi.sh/install.ps1 | iex"
+```
+If this stops working on a future laptop, check https://pixi.sh/latest/ for the current one-liner.
 
 Close and reopen PowerShell afterwards so `pixi` is on your PATH.
 
-## Step 3 — Download the pixi config file
+## Step 4 — Download the pixi config file
 
 Still in PowerShell:
 ```
@@ -29,23 +41,23 @@ cd C:\pixi_ws
 irm https://raw.githubusercontent.com/ros2/ros2/refs/heads/jazzy/pixi.toml -OutFile pixi.toml
 ```
 
-## Step 4 — Install dependencies
+## Step 5 — Install dependencies
 
 ```
 pixi install
 ```
 
-## Step 5 — Download the ROS 2 Windows binary
+## Step 6 — Download the ROS 2 Windows binary
 
 - Go to https://github.com/ros2/ros2/releases
 - **Pick "ROS 2 Jazzy Jalisco - Patch Release 7" specifically** (released 28 Jan 2026) — later patches dropped the Windows binary because Windows 10 (the only supported Windows version for Jazzy) hit end-of-life
 - Download `ros2-jazzy-20260128-windows-release-amd64.zip`
 
-## Step 6 — Unpack
+## Step 7 — Unpack
 
 Unzip the contents into `C:\pixi_ws\ros2-windows`
 
-## Step 7 — Activate the environment (every new session)
+## Step 8 — Activate the environment (every new session)
 
 ⚠️ **Must be Command Prompt (`cmd`), not PowerShell** — `call` doesn't exist in PowerShell and will error out.
 
@@ -55,17 +67,17 @@ pixi shell
 call C:\pixi_ws\ros2-windows\local_setup.bat
 ```
 
-## Step 8 — Test it
+## Step 9 — Test it
 
 ```
 ros2 run demo_nodes_cpp talker
 ```
-In a **second** Command Prompt window (repeat Step 7 first):
+In a **second** Command Prompt window (repeat Step 8 first):
 ```
 ros2 run demo_nodes_py listener
 ```
 
-## Step 9 — Set ROS_DOMAIN_ID to match the RPi fleet
+## Step 10 — Set ROS_DOMAIN_ID to match the RPi fleet
 
 This window only:
 ```
@@ -77,7 +89,7 @@ setx ROS_DOMAIN_ID 42
 ```
 (Only applies to windows opened *after* running this — restart Command Prompt to pick it up.)
 
-## Step 10 — Join the robot's network
+## Step 11 — Join the robot's network
 
 - Laptop WiFi must connect to the **RPi's own hotspot**, not venue/home WiFi — needs to be the same subnet
 - Confirm with `ipconfig` — should show an address like `10.42.0.x`
