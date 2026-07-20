@@ -42,7 +42,7 @@ This board runs Ubuntu Desktop, not Raspberry Pi OS, so `raspi-config` isn't ava
 
 5. **`ROS_DOMAIN_ID`** — only relevant if robots ever share one network (README networking tier 2, marked hit-or-miss); not needed if using tier-1 isolated per-robot hotspots, which is what's recommended. If used, it must be set directly on the systemd service (`Environment=ROS_DOMAIN_ID=<n>` in the unit file) — `.bashrc`-only exports are invisible to systemd-launched nodes (see Known Issues in `README.md`).
 
-6. **Claude Code credentials** — `~/.claude/` on the source Pi holds personal auth/session state. Clear or re-auth this on each clone rather than leaving one account logged in on every machine.
+6. **Claude Code credentials** — `~/.claude/` on the source Pi holds personal auth/session state. Clear or re-auth this on each clone rather than leaving one account logged in on every machine. Logout using command pallete or ctrl+shift+p then do "Claude Code:Logout"
 
 7. **Static IP config**, if any is hardcoded in netplan rather than DHCP — check for hardcoded addresses that would collide across clones.
 
