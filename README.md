@@ -249,7 +249,7 @@ cat /proc/<pid>/environ | tr '\0' '\n' | grep ROS_DOMAIN_ID
 - **Note:** VS Code snap install does not work on ARM64 — use the `.deb` package from the official VS Code website instead
 
 ### Microcontroller
-- **Arduino Nano (ATmega328P)** — the actual, actively-developed target. Firmware lives in `testing/nano_serial_receiving_test/src/main.cpp`: drive, per-side speed, claw servo, ultrasonic distance sensing, and auto/manual mode switching, all driven by serial commands from the RPi.
+- **Arduino Nano (ATmega328P)** — the actual, actively-developed target. Firmware lives in `Arduino/nano_main/src/main.cpp` — this is the copy students pull from the repo and flash to their own Nano; `testing/nano_serial_receiving_test/` is the original dev/test copy it was copied from, kept for history. Covers drive, per-side speed, claw servo, ultrasonic distance sensing, and auto/manual mode switching, all driven by serial commands from the RPi.
 - An ESP32 (`testing/serial_data_recevinging_test/src/main.cpp`) was used earlier as a stand-in before a Nano was available. Kept in the repo for reference only — it's not been updated to match the current serial protocol and shouldn't be used to test against real hardware.
 - Neither can run micro-ROS (insufficient memory) — communicates with ROS via a serial bridge node on the RPi (`direction_to_serial`)
 
@@ -293,7 +293,7 @@ RPi ↔ Nano serial bridge. Runs **on the RPi**. `direction_to_serial` has two i
 
 `direction_publisher` (also in this package) publishes mock alternating `forward`/`backward` messages — it was the original stand-in used to test the pub/sub wiring before a real controller existed. **It's now superseded by `laptop_controller_test`'s `laptop_controller` node** (see below) and its message content (`forward`/`backward`, lowercase) no longer matches the current protocol — don't use it to test against real hardware anymore, it's kept only as a minimal pub/sub example.
 
-**Serial protocol** — implemented in `testing/nano_serial_receiving_test/src/main.cpp` (the actual, current Nano firmware; the older `testing/serial_data_recevinging_test/src/main.cpp` is the retired ESP32 reference and does **not** match this). Plain-word commands, one per line, no numeric codes/magic numbers for anything that isn't a genuine value the hardware needs:
+**Serial protocol** — implemented in `Arduino/nano_main/src/main.cpp` (the actual, current Nano firmware students flash; the older `testing/serial_data_recevinging_test/src/main.cpp` is the retired ESP32 reference and does **not** match this). Plain-word commands, one per line, no numeric codes/magic numbers for anything that isn't a genuine value the hardware needs:
 - `FORWARD` / `BACKWARD` / `LEFT` / `RIGHT` / `STOP` — manual driving. Only one action at a time (tank-style: can't turn and drive forward simultaneously) — falls out naturally since the firmware only ever tracks one active command. Turning pivots in place (one side's motors forward, the other side's backward); see the comment above `turnLeft()`/`turnRight()` for the left/right pin assumption, which may need swapping once tested on the real chassis.
 - `SPEED,<left>,<right>` — independent per-side PWM (0-255). Manual mode always sends equal values; automatic tracking biases one side faster than the other while driving `FORWARD`, line-follower style, instead of pivoting.
 - `CLAW,OPEN` / `CLAW,CLOSE` — servo to its calibrated open/close angle (found via `servo_test`, not 0/180).
