@@ -1,3 +1,6 @@
+# Claude Code local settings (per-developer, not for distribution)
+.claude/settings.local.json
+
 # Prerequisites
 *.d
 
