@@ -1,3 +1,5 @@
+import math
+
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
@@ -6,9 +8,27 @@ from rclpy.qos import qos_profile_sensor_data
 # Cruising speed while centered, and how much one wheel is boosted/slowed
 # per unit of offset. BASE_SPEED is kept below MAX_SPEED so TURN_GAIN has
 # room to push one wheel up without clipping — see compute_speeds().
-BASE_SPEED = 70
-TURN_GAIN = 30
-MAX_SPEED = 100
+# MAX_SPEED is raw PWM (analogWrite on the Nano, see main.cpp setSpeed()),
+# not a percentage — 255 is the real ceiling, matching laptop_controller's
+# KEY_TO_SPEED range. Don't lower MAX_SPEED to throttle turns — that caps
+# the fast wheel too and weakens the turn. TURN_GAIN is set high enough
+# that a full-left/right offset clips to a full pivot (one wheel at 255,
+# the other at 0) — the wheels are rubbery/high-friction enough that a
+# partial differential (e.g. 210 vs 90) isn't enough to actually turn.
+BASE_SPEED = 150
+TURN_GAIN = 150
+MAX_SPEED = 255
+
+# offset is bent through TURN_CURVE before scaling by TURN_GAIN (see
+# compute_speeds) so small offsets already get most of the turn strength —
+# needed so the ultrasonic (narrow FOV, mounted facing forward) picks the
+# cylinder back up well before the target drifts to the frame edge.
+# 0.5 = square root: offset 0.3 -> ~0.55 turn strength, offset 1.0 -> 1.0.
+# DEADBAND ignores offsets this small — without it, camera jitter around
+# dead-center would get amplified by the curve (steepest right at 0) into
+# a visibly twitchy/oscillating drive.
+TURN_CURVE = 0.5
+DEADBAND = 0.05
 
 
 def clamp_speed(speed):
@@ -19,12 +39,19 @@ def compute_speeds(offset):
     """offset: -1.0 (target fully left) .. 0.0 (centered) .. 1.0 (fully right).
 
     To turn toward the target, the wheel on that side slows relative to the
-    other — e.g. offset > 0 (target right) slows the right wheel. Flip the
-    signs here if testing shows the robot turning the wrong way; left/right
-    wiring has needed swapping before (see the note in main.cpp).
+    other — e.g. offset > 0 (target right) slows the right wheel. Signs were
+    flipped from the original left/right assumption because testing showed
+    the robot turning the wrong way; left/right wiring has needed swapping
+    before (see the note in main.cpp) — if wiring ever gets corrected on the
+    hardware side, flip these signs back.
     """
-    left = clamp_speed(round(BASE_SPEED + offset * TURN_GAIN))
-    right = clamp_speed(round(BASE_SPEED - offset * TURN_GAIN))
+    if abs(offset) < DEADBAND:
+        turn = 0.0
+    else:
+        turn = math.copysign(abs(offset) ** TURN_CURVE, offset)
+
+    left = clamp_speed(round(BASE_SPEED - turn * TURN_GAIN))
+    right = clamp_speed(round(BASE_SPEED + turn * TURN_GAIN))
     return left, right
 
 
